@@ -1,0 +1,17 @@
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import AdminPageShell from './AdminPageShell.vue'
+import { configApi } from '@/api/configApi'
+import type { ConfigEntry } from '@/types/admin'
+import type { PageResponse } from '@/types/api'
+const query = reactive({ pageNo: 1, pageSize: 10, keyword: '' }); const result = ref<PageResponse<ConfigEntry>>({ data: [], pageNo: 1, pageSize: 10, totalCount: 0, totalPage: 0, success: true }); const loading = ref(false); const dialog = ref(false); const editing = ref<Partial<ConfigEntry>>({})
+async function load() { loading.value = true; try { result.value = await configApi.query(query) } catch (e) { ElMessage.error(e instanceof Error ? e.message : '配置加载失败') } finally { loading.value = false } }
+function open(row?: ConfigEntry) { editing.value = row ? { ...row } : {}; dialog.value = true }
+async function save() { if (!editing.value.configKey || !editing.value.configValue) return ElMessage.warning('请填写配置 Key 和值'); await (editing.value.id ? configApi.update(editing.value.id, editing.value) : configApi.save(editing.value)); dialog.value = false; ElMessage.success('保存成功'); load() }
+async function remove(row: ConfigEntry) { await ElMessageBox.confirm(`确定删除配置 ${row.configKey} 吗？`, '删除配置', { type: 'warning' }); await configApi.remove(row.id); ElMessage.success('已删除'); load() }
+async function reload() { await configApi.reload(); ElMessage.success('配置已重新加载') }
+onMounted(load)
+</script>
+<template><AdminPageShell eyebrow="SYSTEM CONFIGURATION" title="系统配置" description="维护运行时业务配置，并在修改后按需刷新服务缓存。"><template #actions><el-button @click="reload">重载配置</el-button><el-button type="primary" @click="open()">新增配置</el-button></template><el-card><div class="toolbar"><el-input v-model="query.keyword" clearable placeholder="搜索配置 Key" @keyup.enter="load" /><el-button type="primary" @click="load">查询</el-button></div><el-table v-loading="loading" :data="result.data" row-key="id"><el-table-column prop="configKey" label="配置 Key" min-width="190" /><el-table-column prop="configName" label="名称" width="160" /><el-table-column prop="configValue" label="值" min-width="220" show-overflow-tooltip /><el-table-column prop="remark" label="备注" min-width="200" /><el-table-column label="操作" width="150"><template #default="{ row }"><el-button link type="primary" @click="open(row)">编辑</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column></el-table><el-pagination v-model:current-page="query.pageNo" v-model:page-size="query.pageSize" layout="total, prev, pager, next" :total="result.totalCount" @current-change="load" /></el-card><el-dialog v-model="dialog" :title="editing.id ? '编辑配置' : '新增配置'" width="520px"><el-form label-position="top"><el-form-item label="配置 Key"><el-input v-model="editing.configKey" /></el-form-item><el-form-item label="配置名称"><el-input v-model="editing.configName" /></el-form-item><el-form-item label="配置值"><el-input v-model="editing.configValue" type="textarea" :rows="4" /></el-form-item><el-form-item label="备注"><el-input v-model="editing.remark" /></el-form-item></el-form><template #footer><el-button @click="dialog = false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template></el-dialog></AdminPageShell></template>
+<style scoped>.toolbar { display: flex; gap: 10px; margin-bottom: 18px; }.toolbar .el-input { max-width: 300px; }.el-pagination { justify-content: flex-end; margin-top: 18px; }</style>

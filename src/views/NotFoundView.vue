@@ -1,0 +1,1 @@
+<template><div class="page-section"><el-result icon="warning" title="页面不存在" sub-title="请检查访问地址"><template #extra><el-button type="primary" @click="$router.push('/workspace')">返回工作台</el-button></template></el-result></div></template>

@@ -3,9 +3,15 @@ import { ApiError } from '@/utils/errors'
 
 const TOKEN_KEY = 'corp_trip_token'
 const TOKEN_NAME_KEY = 'corp_trip_token_name'
+const AUTHORIZATION_HEADER = 'Authorization'
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
+}
+
+export function getAuthorizationHeader() {
+  const token = getToken()?.replace(/^Bearer\s+/i, '').trim()
+  return token ? `Bearer ${token}` : undefined
 }
 
 export function setToken(value: string, tokenName = 'token') {
@@ -26,9 +32,8 @@ function buildUrl(path: string, base = appConfig.apiBaseUrl) {
 export async function request<T>(path: string, init: RequestInit = {}, base?: string): Promise<T> {
   const headers = new Headers(init.headers)
   if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json')
-  const token = getToken()
-  const tokenName = localStorage.getItem(TOKEN_NAME_KEY) || 'token'
-  if (token) headers.set(tokenName, token)
+  const authorization = getAuthorizationHeader()
+  if (authorization) headers.set(AUTHORIZATION_HEADER, authorization)
   let response: Response
   try {
     response = await fetch(buildUrl(path, base), { ...init, headers })

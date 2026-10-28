@@ -7,6 +7,8 @@ import type { PageResponse } from '@/types/api'
 
 import { mockConversation, mockStream } from '@/mocks/fixtures'
 
+const SSE_REQUEST_TIMEOUT_MS = 31 * 60 * 1000
+
 const mockConversations: Conversation[] = [{ ...mockConversation, messageCount: 0 }]
 const mockMessages = new Map<number, ConversationMessage[]>()
 let mockConversationId = mockConversation.id
@@ -116,7 +118,7 @@ export const conversationApi = {
       return
     }
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 30000)
+    const timeout = window.setTimeout(() => controller.abort(), SSE_REQUEST_TIMEOUT_MS)
     const abort = () => controller.abort()
     signal?.addEventListener('abort', abort, { once: true })
     try {
@@ -157,7 +159,7 @@ export const conversationApi = {
       return
     }
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 30000)
+    const timeout = window.setTimeout(() => controller.abort(), SSE_REQUEST_TIMEOUT_MS)
     const abort = () => controller.abort()
     signal?.addEventListener('abort', abort, { once: true })
     try {

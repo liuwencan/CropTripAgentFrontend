@@ -31,6 +31,17 @@ describe('conversation store', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/agent/conversations'))).toBe(false)
     appConfig.enableMock = true
   })
+  it('keeps chat and resume SSE requests alive for the backend 30-minute timeout', async () => {
+    appConfig.enableMock = false
+    const timeoutSpy = vi.spyOn(window, 'setTimeout')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('event: complete\ndata: {}\n\n', { status: 200 })))
+
+    for await (const _event of conversationApi.stream(12, 'Plan trip')) { /* consume */ }
+    for await (const _event of conversationApi.resume(12, 'ask-call-1', 'Shanghai')) { /* consume */ }
+
+    expect(timeoutSpy.mock.calls.map(([_, delay]) => delay)).toEqual([31 * 60 * 1000, 31 * 60 * 1000])
+    appConfig.enableMock = true
+  })
   it('streams ordered assistant content without duplicating user messages', async () => {
     const store = useConversationStore()
     await store.send('帮我规划上海到北京的行程')

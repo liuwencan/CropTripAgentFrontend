@@ -18,7 +18,6 @@ const searchOpen = ref(false)
 const search = ref('')
 const searchInput = ref<HTMLInputElement>()
 const loadError = ref('')
-const creating = ref(false)
 const sidebar = ref<HTMLElement>()
 let previousFocus: HTMLElement | null = null
 const isAdmin = computed(() => auth.isAdmin && appConfig.features.admin)
@@ -70,13 +69,10 @@ onMounted(() => {
 })
 onBeforeUnmount(() => window.removeEventListener('resize', closeOnDesktop))
 async function newConversation() {
-  if (conversations.sending || creating.value) return
-  creating.value = true
-  try {
-    await conversations.createConversation()
-    await router.push('/workspace')
-    mobileOpen.value = false
-  } catch { ElMessage.error('新建对话失败，请重试') } finally { creating.value = false }
+  if (conversations.sending) return
+  conversations.createConversation()
+  await router.push('/workspace')
+  mobileOpen.value = false
 }
 async function selectConversation(id: number) {
   if (conversations.sending) return
@@ -109,7 +105,7 @@ async function signOut() {
         <button class="icon-button mobile-close" aria-label="关闭会话侧栏" @click="mobileOpen = false"><el-icon><Close /></el-icon></button>
       </div>
       <div class="sidebar-actions">
-        <button class="new-chat-button" :disabled="conversations.sending || creating" title="新建对话" @click="newConversation"><el-icon><Plus /></el-icon><span class="sidebar-label">{{ creating ? '正在新建…' : '新建对话' }}</span></button>
+        <button class="new-chat-button" :disabled="conversations.sending" title="新建对话" @click="newConversation"><el-icon><Plus /></el-icon><span class="sidebar-label">新建对话</span></button>
         <button class="icon-button search-button" aria-label="搜索会话" title="搜索会话" :aria-expanded="searchOpen" @click="toggleSearch"><el-icon><Search /></el-icon></button>
       </div>
       <div v-if="searchOpen && !collapsed" class="sidebar-search"><el-icon><Search /></el-icon><input ref="searchInput" v-model="search" aria-label="搜索历史会话" placeholder="搜索历史会话" /><button v-if="search" class="icon-button" aria-label="清空搜索" @click="search = ''"><el-icon><Close /></el-icon></button></div>
@@ -132,15 +128,15 @@ async function signOut() {
         <nav v-if="isAdmin" class="admin-nav" aria-label="管理员菜单"><RouterLink v-for="link in adminLinks" :key="link.path" :to="link.path" class="admin-nav-link"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</RouterLink></nav>
         <el-dropdown v-if="isAdmin" trigger="click" class="admin-mobile"><button class="admin-menu-button">管理菜单<el-icon><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="link in adminLinks" :key="link.path" @click="router.push(link.path)">{{ link.label }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
       </header>
-      <main id="main-content" class="app-main"><RouterView /></main>
+      <main id="main-content" class="app-main" :class="{ 'workspace-main': route.name === 'workspace' }"><RouterView /></main>
     </div>
   </div>
 </template>
 
 <style scoped>
-.app-shell { display: grid; grid-template-columns: 256px minmax(0, 1fr); height: 100dvh; overflow: hidden; background: var(--surface); }
+.app-shell { display: grid; grid-template-columns: 256px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; background: var(--surface); }
 .app-shell.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
-.app-sidebar { display: flex; min-width: 0; flex-direction: column; padding: 0 14px; background: var(--sidebar); border-right: 1px solid var(--line); }
+.app-sidebar { display: flex; min-width: 0; min-height: 0; flex-direction: column; padding: 0 14px; background: var(--sidebar); border-right: 1px solid var(--line); }
 .sidebar-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 80px; flex-shrink: 0; }
 .brand-link { text-decoration: none; color: inherit; }
 .sidebar-fold { color: var(--text-muted); }
@@ -153,7 +149,7 @@ async function signOut() {
 .sidebar-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; font-size: 13px; }
 .sidebar-search:focus-within { border-color: var(--accent); }
 .sidebar-search .icon-button { width: 24px; height: 26px; }
-.sidebar-history { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -5px; padding: 0 5px; }
+.sidebar-history { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; -webkit-overflow-scrolling: touch; margin: 0 -5px; padding: 0 5px; }
 .history-group { margin-bottom: 22px; }
 .history-group h2 { margin: 0; padding: 0 10px 9px; color: var(--text-muted); font-size: 12px; font-weight: 400; }
 .conversation-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 40px; padding: 10px; margin-bottom: 3px; border: 0; border-radius: 6px; background: transparent; color: #50596a; text-align: left; cursor: pointer; font-size: 13px; }
@@ -186,6 +182,8 @@ async function signOut() {
 .admin-nav-link:hover { background: var(--sidebar); color: var(--text); }
 .admin-nav-link.router-link-active { background: var(--accent-soft); color: var(--accent); }
 .app-main { min-height: 0; flex: 1; overflow: auto; }
+.app-main.workspace-main { display: flex; flex-direction: column; overflow: hidden; }
+.workspace-main > :deep(.workspace) { flex: 1; min-height: 0; }
 .admin-mobile, .mobile-toggle, .mobile-close, .sidebar-backdrop { display: none; }
 .admin-menu-button { display: flex; align-items: center; gap: 8px; padding: 8px; border: 0; background: transparent; color: var(--text-muted); white-space: nowrap; cursor: pointer; font-size: 12px; }
 .sidebar-collapsed .sidebar-label, .history-hidden, .sidebar-collapsed .search-button { display: none; }

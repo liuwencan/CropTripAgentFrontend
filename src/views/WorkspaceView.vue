@@ -8,6 +8,7 @@ import TravelBrand from '@/components/TravelBrand.vue'
 import TravelWorkflowBlock from '@/components/TravelWorkflowBlock.vue'
 import { useConversationStore } from '@/store/conversation'
 import { useWorkflowStore } from '@/store/workflow'
+import type { ConversationMessage as ConversationMessageData } from '@/types/conversation'
 import type { WorkflowBlock } from '@/types/workflow'
 import { appConfig } from '@/config'
 
@@ -53,6 +54,11 @@ async function send(text: string) {
   autoScroll.value = true
   try { await conversations.send(text) } catch { composer.value?.setDraft(text); ElMessage.error('消息发送失败，请稍后重试') }
 }
+async function submitAsk(message: ConversationMessageData, _value: unknown, display: string) {
+  if (message.askStatus === 'submitted' || conversations.sending) return
+  autoScroll.value = true
+  try { await conversations.answerAsk(message, display) } catch { composer.value?.setDraft(display); ElMessage.error('回答发送失败，请重试') }
+}
 function starter(text: string) { composer.value?.setDraft(text) }
 </script>
 
@@ -64,7 +70,7 @@ function starter(text: string) { composer.value?.setDraft(text) }
         <h1>这次出差，有什么可以帮你？</h1>
         <p>查询差旅标准、规划出行安排，让每一步都有依据。</p>
       </div>
-      <div v-else class="message-thread"><ConversationMessage v-for="message in conversations.messages" :key="message.id" :message="message" @retry="conversations.retry" /><TravelWorkflowBlock v-for="block in workflowBlocks" :key="block.workflowId" :block="block" @confirm="workflow.confirm" @cancel="workflow.cancel" /></div>
+      <div v-else class="message-thread"><ConversationMessage v-for="message in conversations.messages" :key="message.id" :message="message" @retry="conversations.retry" @ask-submit="submitAsk" /><TravelWorkflowBlock v-for="block in workflowBlocks" :key="block.workflowId" :block="block" @confirm="workflow.confirm" @cancel="workflow.cancel" /></div>
     </section>
     <div class="composer-dock">
       <MessageComposer ref="composer" :key="conversations.activeId ?? 'new'" :sending="conversations.sending" @send="send" @stop="conversations.stop" />
@@ -76,8 +82,8 @@ function starter(text: string) { composer.value?.setDraft(text) }
 </template>
 
 <style scoped>
-.workspace { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.message-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 36px 12px; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.workspace { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+.message-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 24px 36px 12px; overscroll-behavior: contain; scrollbar-gutter: stable; -webkit-overflow-scrolling: touch; }
 .message-thread { max-width: 800px; margin: 0 auto; }
 .welcome { width: 100%; max-width: 800px; margin: 0 auto; padding: 16px 0 32px; text-align: center; }
 .welcome-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 24px; color: var(--text); font-size: 17px; font-weight: 500; }
@@ -88,8 +94,8 @@ function starter(text: string) { composer.value?.setDraft(text) }
 .starter-list button { display: flex; align-items: center; gap: 8px; padding: 9px 15px; border: 1px solid var(--line); border-radius: 7px; background: white; color: #596477; font-size: 12px; cursor: pointer; }
 .starter-list button .el-icon { color: #7d8ca5; font-size: 15px; }.starter-list button:hover { color: var(--accent); border-color: #b7c7eb; background: #fafbfe; }
 .conversation-disclaimer, .workspace-footer { margin: 12px 0 13px; color: #818a99; font-size: 11px; line-height: 1.7; text-align: center; }
-.is-empty .message-scroll { display: flex; flex: 1; align-items: flex-end; }
-.is-empty .composer-dock { flex: 1; padding-top: 0; }
+.is-empty .message-scroll { display: flex; flex: 1; align-items: flex-end; justify-content: center; }
+.is-empty .composer-dock { flex: 0 0 auto; padding-top: 0; }
 .workspace-footer { flex-shrink: 0; padding: 0 20px; margin-bottom: 18px; }
 @media (max-width: 720px) { .message-scroll { padding: 20px 18px 6px; }.composer-dock { padding: 8px 18px 0; }.welcome { padding-bottom: 24px; }.welcome-brand { margin-bottom: 18px; }.welcome h1 { font-size: 24px; }.welcome p { max-width: 280px; margin: 0 auto; font-size: 13px; }.starter-list { gap: 8px; margin-top: 18px; }.starter-list button { padding: 9px 11px; }.conversation-disclaimer { font-size: 10px; margin-bottom: 9px; } }
 @media (max-width: 420px) { .starter-list { display: grid; grid-template-columns: repeat(2, 1fr); }.starter-list button { justify-content: center; }.welcome h1 { font-size: 21px; }.workspace-footer { font-size: 10px; }.welcome-brand { font-size: 15px; } }

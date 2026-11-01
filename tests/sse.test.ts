@@ -53,4 +53,36 @@ describe('parseSseEvent', () => {
     expect(parseSseEvent('event: tool_result\ndata: {"conversationId":25,"toolCallId":"call-1","toolResult":"\\\"用户信息：rel\\\""}')).toMatchObject({ type: 'tool_result', payload: { toolCallId: 'call-1', toolResult: '"用户信息：rel"' } })
     expect(parseSseEvent('event: tool_success\ndata: {"conversationId":25,"toolCallId":"call-1","phase":"completed","state":"success"}')).toMatchObject({ type: 'tool_success', payload: { toolCallId: 'call-1', state: 'success' } })
   })
+
+  const progress = {
+    eventId: 'event-1', eventType: 'tool_result', agentId: 'agent-1', agentName: '主智能体',
+    tooldesc: '获取用户信息', timestamp: 1793505600123, toolCallId: 'call-1', toolName: 'get_userinfo',
+    input: { scope: 'current', options: { limit: 2 } }, output: '第一段\n第二段', messageId: null, status: 'completed',
+  }
+
+  it.each(['tool_start', 'tool_result'] as const)('preserves every field of the Hook %s payload', (type) => {
+    const payload = { ...progress, eventType: type, status: type === 'tool_start' ? 'running' : 'completed', output: type === 'tool_start' ? null : progress.output }
+    expect(parseSseEvent(`event:${type}\ndata:${JSON.stringify(payload)}`, 9)).toEqual({ version: 1, type, sequence: 9, payload })
+  })
+
+  it('accepts eventType-only progress and typed envelopes with an explicit sequence', () => {
+    expect(parseSseEvent(`data:${JSON.stringify(progress)}`, 7)).toEqual({ version: 1, type: 'tool_result', sequence: 7, payload: progress })
+    expect(parseSseEvent(`data:${JSON.stringify({ version: 1, type: 'tool_result', sequence: 12, payload: progress })}`)).toMatchObject({ type: 'tool_result', sequence: 12, payload: progress })
+  })
+
+  it('preserves suspended status and empty output instead of inferring success', () => {
+    const payload = { ...progress, status: 'suspended', output: '' }
+    expect(parseSseEvent(`event:tool_result\ndata:${JSON.stringify(payload)}`)).toMatchObject({ type: 'tool_result', payload: { status: 'suspended', output: '' } })
+  })
+
+  it('parses thinking with nullable tool fields and preserves whitespace', () => {
+    const payload = { ...progress, eventType: 'thinking', toolCallId: null, toolName: null, input: null, messageId: 'msg-1', output: ' ', status: 'running' }
+    expect(parseSseEvent(`event:thinking\ndata:${JSON.stringify(payload)}`, 5)).toEqual({ version: 1, type: 'thinking', sequence: 5, payload })
+  })
+
+  it('parses tool errors and rejects malformed typed progress frames', () => {
+    expect(parseSseEvent(`event:tool_error\ndata:${JSON.stringify({ ...progress, status: 'failed' })}`)).toMatchObject({ type: 'tool_error', payload: { toolCallId: 'call-1', status: 'failed' } })
+    expect(parseSseEvent('data:{"type":"tool_result","sequence":1,"payload":{"toolCallId":null}}')).toBeNull()
+    expect(parseSseEvent('event:thinking\ndata:{"eventType":"thinking","output":null}')).toBeNull()
+  })
 })

@@ -1,4 +1,4 @@
-import type { AskUserPrompt, StreamEvent, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
+import type { AskUserPrompt, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
 
 function extractDelta(value: unknown): string | undefined {
   if (typeof value === 'string') return value
@@ -81,31 +81,39 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
         },
       }
     }
-    if (typeof payload.type === 'string' && typeof payload.sequence === 'number') return payload as StreamEvent
-    if (eventName === 'tool_start' && typeof payload.toolCallId === 'string' && typeof payload.toolName === 'string') {
+    const progress = parseObject(payload.payload) ?? payload
+    const progressType = eventName === 'tool_start' || eventName === 'tool_result' || eventName === 'tool_error' || eventName === 'thinking' || eventName === 'tool_success'
+      ? eventName : payload.eventType ?? payload.type ?? progress.eventType
+    const sequence = typeof payload.sequence === 'number' ? payload.sequence : fallbackSequence
+    if (progressType === 'tool_start' && typeof progress.toolCallId === 'string' && typeof progress.toolName === 'string') {
       return {
         version: 1,
         type: 'tool_start',
-        sequence: fallbackSequence,
-        payload: payload as unknown as ToolStartEventPayload,
+        sequence,
+        payload: progress as unknown as ToolStartEventPayload,
       }
     }
-    if (eventName === 'tool_result' && typeof payload.toolCallId === 'string') {
+    if ((progressType === 'tool_result' || progressType === 'tool_error') && typeof progress.toolCallId === 'string') {
       return {
         version: 1,
-        type: 'tool_result',
-        sequence: fallbackSequence,
-        payload: payload as unknown as ToolResultEventPayload,
+        type: progressType,
+        sequence,
+        payload: progress as unknown as ToolResultEventPayload,
       }
     }
-    if (eventName === 'tool_success' && typeof payload.toolCallId === 'string') {
+    if (progressType === 'thinking' && typeof progress.output === 'string') {
+      return { version: 1, type: 'thinking', sequence, payload: progress as unknown as ThinkingEventPayload }
+    }
+    if (progressType === 'tool_success' && typeof progress.toolCallId === 'string') {
       return {
         version: 1,
         type: 'tool_success',
-        sequence: fallbackSequence,
-        payload: payload as unknown as ToolSuccessEventPayload,
+        sequence,
+        payload: progress as unknown as ToolSuccessEventPayload,
       }
     }
+    if (['tool_start', 'tool_result', 'tool_error', 'tool_success', 'thinking'].includes(String(progressType))) return null
+    if (typeof payload.type === 'string' && typeof payload.sequence === 'number') return payload as StreamEvent
     if (eventName === 'error') {
       return { version: 1, type: 'error', sequence: fallbackSequence, payload: { message: typeof payload.message === 'string' ? payload.message : '流式响应失败' } }
     }

@@ -20,15 +20,44 @@ export interface Message {
 
 export type AssistantMessageStatus = 'loading' | 'streaming' | 'awaiting-input' | 'completed' | 'failed' | 'cancelled'
 
-export type ToolCallStatus = 'running' | 'success'
+// completed describes execution finishing, not business success.
+export type ProgressStatus = 'running' | 'completed' | 'suspended' | 'failed' | 'cancelled' | 'interrupted'
+export type ToolCallStatus = ProgressStatus | 'success'
+
+export interface AgentProgressMetadata {
+  conversationId?: number
+  eventId?: string | null
+  eventType?: string
+  agentId?: string | null
+  agentName?: string | null
+  tooldesc?: string | null
+  timestamp?: number
+  status?: ProgressStatus
+}
 
 export interface ToolCall {
   toolCallId: string
-  agentName?: string
+  agentId?: string | null
+  agentName?: string | null
   toolName: string
+  tooldesc?: string | null
   input?: unknown
   result?: unknown
   status: ToolCallStatus
+  timestamp?: number
+  completedAt?: number
+  sequence?: number
+}
+
+export interface AgentOutput {
+  id: string
+  agentId?: string | null
+  agentName?: string | null
+  messageId?: string | null
+  content: string
+  timestamp: number
+  sequence: number
+  status: ProgressStatus
 }
 
 export interface ConversationMessage extends Message {
@@ -37,6 +66,7 @@ export interface ConversationMessage extends Message {
   blocks?: unknown[]
   error?: string
   toolCalls?: ToolCall[]
+  agentOutputs?: AgentOutput[]
   ask?: AskUserPrompt
   askToolCallId?: string
   askStatus?: 'pending' | 'submitted'
@@ -71,21 +101,33 @@ export interface AskUserEventPayload {
   delta: AskUserPrompt
 }
 
-export interface ToolStartEventPayload {
+export interface ToolStartEventPayload extends AgentProgressMetadata {
   toolCallId: string
-  agentName?: string
   toolName: string
   input?: unknown
+  output?: string | null
+  messageId?: string | null
 }
 
-export interface ToolResultEventPayload {
-  conversationId?: number
+export interface ToolResultEventPayload extends AgentProgressMetadata {
   toolCallId: string
+  toolName?: string | null
+  input?: unknown
+  output?: string | null
+  messageId?: string | null
+  /** Compatibility with the previous SSE contract. */
   toolResult?: unknown
 }
 
-export interface ToolSuccessEventPayload {
-  conversationId?: number
+export interface ThinkingEventPayload extends AgentProgressMetadata {
+  output: string
+  messageId?: string | null
+  toolCallId?: null
+  toolName?: null
+  input?: null
+}
+
+export interface ToolSuccessEventPayload extends AgentProgressMetadata {
   toolCallId: string
   phase?: string
   state?: string
@@ -101,6 +143,8 @@ export type StreamEvent =
   | { version: number; type: 'ask'; sequence: number; messageId?: number; payload: AskUserEventPayload }
   | { version: number; type: 'tool_start'; sequence: number; messageId?: number; payload: ToolStartEventPayload }
   | { version: number; type: 'tool_result'; sequence: number; messageId?: number; payload: ToolResultEventPayload }
+  | { version: number; type: 'tool_error'; sequence: number; messageId?: number; payload: ToolResultEventPayload }
+  | { version: number; type: 'thinking'; sequence: number; messageId?: number; payload: ThinkingEventPayload }
   | { version: number; type: 'tool_success'; sequence: number; messageId?: number; payload: ToolSuccessEventPayload }
   | { version: number; type: 'message.done'; sequence: number; messageId?: number; payload?: ConversationCompletePayload }
   | { version: number; type: 'workflow.update'; sequence: number; messageId?: number; payload: Record<string, unknown> }

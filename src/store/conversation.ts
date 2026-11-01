@@ -1,7 +1,7 @@
 import { computed, reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { conversationApi } from '@/api/conversationApi'
-import type { Conversation, ConversationMessage, StreamEvent, ToolCall } from '@/types/conversation'
+import type { AgentOutput, AgentProgressMetadata, Conversation, ConversationMessage, StreamEvent, ToolCall } from '@/types/conversation'
 
 export const useConversationStore = defineStore('conversation', () => {
   const conversations = ref<Conversation[]>([])
@@ -13,13 +13,38 @@ export const useConversationStore = defineStore('conversation', () => {
   const workflowEvents = ref<StreamEvent[]>([])
   const activeConversation = computed(() => conversations.value.find((item) => item.id === activeId.value) ?? null)
 
-  function findOrCreateToolCall(assistant: ConversationMessage, toolCallId: string): ToolCall {
-    const toolCalls = assistant.toolCalls ?? (assistant.toolCalls = [])
-    const existing = toolCalls.find((tool) => tool.toolCallId === toolCallId)
+  function findOrCreateToolCall(assistant: ConversationMessage, payload: AgentProgressMetadata & { toolCallId: string }, sequence: number): ToolCall {
+    assistant.toolCalls ??= []
+    const toolCalls = assistant.toolCalls
+    const candidates = toolCalls.filter((tool) => tool.toolCallId === payload.toolCallId)
+    const existing = payload.agentId
+      ? candidates.find((tool) => tool.agentId === payload.agentId) ?? (candidates.length === 1 && !candidates[0]!.agentId ? candidates[0] : undefined)
+      : candidates.length === 1 ? candidates[0] : undefined
     if (existing) return existing
-    const tool: ToolCall = { toolCallId, toolName: '工具', status: 'running' }
+    const tool: ToolCall = { toolCallId: payload.toolCallId, agentId: payload.agentId, toolName: '工具', status: 'running', timestamp: payload.timestamp ?? Date.now(), sequence }
     toolCalls.push(tool)
-    return tool
+    // Return the reactive array entry so streamed updates also refresh the UI.
+    return toolCalls[toolCalls.length - 1]!
+  }
+
+  function updateToolMetadata(tool: ToolCall, payload: AgentProgressMetadata & { toolName?: string | null; input?: unknown }) {
+    if (payload.agentId) tool.agentId = payload.agentId
+    if (payload.agentName) tool.agentName = payload.agentName
+    if (payload.toolName) tool.toolName = payload.toolName
+    if (payload.tooldesc) tool.tooldesc = payload.tooldesc
+    if (payload.input !== undefined && payload.input !== null) tool.input = payload.input
+  }
+
+  function settleAgentProgress(assistant: ConversationMessage) {
+    const status = assistant.status === 'failed' ? 'failed'
+      : assistant.status === 'cancelled' ? 'cancelled'
+        : assistant.status === 'awaiting-input' ? 'suspended' : 'interrupted'
+    for (const tool of assistant.toolCalls ?? []) {
+      if (tool.status === 'running') tool.status = status
+    }
+    for (const output of assistant.agentOutputs ?? []) {
+      if (output.status === 'running') output.status = status === 'interrupted' ? 'completed' : status
+    }
   }
 
   function mergeMessageDelta(current: string, incoming: string): string {
@@ -75,26 +100,64 @@ export const useConversationStore = defineStore('conversation', () => {
     abortController.value = new AbortController()
     let awaitingInput = false
     let streamedConversationId = conversationId
+    const seenEvents = new Set<string>()
+    let lastOutput: AgentOutput | undefined
     try {
       for await (const event of stream(conversationId, content, abortController.value.signal)) {
+        if (event.payload && 'eventId' in event.payload && typeof event.payload.eventId === 'string') {
+          if (seenEvents.has(event.payload.eventId)) continue
+          seenEvents.add(event.payload.eventId)
+        }
         const eventConversationId = event.payload && 'conversationId' in event.payload && typeof event.payload.conversationId === 'number' ? event.payload.conversationId : undefined
         if (eventConversationId !== undefined && streamedConversationId === null) {
           streamedConversationId = eventConversationId
           adoptConversation(eventConversationId, content, userMessage, assistant)
         }
         if (event.type === 'tool_start') {
-          const tool = findOrCreateToolCall(assistant, event.payload.toolCallId)
-          Object.assign(tool, event.payload, { status: 'running' as const })
+          lastOutput = undefined
+          const tool = findOrCreateToolCall(assistant, event.payload, event.sequence)
+          updateToolMetadata(tool, event.payload)
+          if (event.payload.timestamp !== undefined) tool.timestamp = event.payload.timestamp
+          tool.sequence = event.sequence
+          // A late start frame must not undo an already received result.
+          if (tool.status === 'running' || tool.status === 'suspended') tool.status = event.payload.status ?? 'running'
+          for (const output of assistant.agentOutputs ?? []) {
+            if ((tool.agentId ? output.agentId === tool.agentId : !output.agentId && output.agentName === tool.agentName) && output.status === 'running') output.status = 'completed'
+          }
           continue
         }
-        if (event.type === 'tool_result') {
-          const tool = findOrCreateToolCall(assistant, event.payload.toolCallId)
-          if (event.payload.toolResult !== undefined) tool.result = event.payload.toolResult
+        if (event.type === 'tool_result' || event.type === 'tool_error') {
+          lastOutput = undefined
+          const tool = findOrCreateToolCall(assistant, event.payload, event.sequence)
+          updateToolMetadata(tool, event.payload)
+          if (event.payload.output !== undefined && event.payload.output !== null) tool.result = event.payload.output
+          else if (event.payload.toolResult !== undefined) tool.result = event.payload.toolResult
+          tool.completedAt = event.payload.timestamp ?? Date.now()
+          tool.status = event.type === 'tool_error' ? 'failed' : event.payload.status ?? 'completed'
+          continue
+        }
+        if (event.type === 'thinking') {
+          if (!event.payload.output) continue
+          const payload = event.payload
+          assistant.agentOutputs ??= []
+          const outputs = assistant.agentOutputs
+          if (lastOutput && lastOutput.agentId === payload.agentId && lastOutput.agentName === payload.agentName && lastOutput.messageId === payload.messageId) {
+            // Hook output is incremental; repeated fragments and whitespace are meaningful.
+            lastOutput.content += payload.output
+            lastOutput.status = payload.status ?? 'running'
+          } else {
+            if (lastOutput?.status === 'running') lastOutput.status = 'completed'
+            outputs.push({ id: payload.eventId ?? `thinking-${event.sequence}-${outputs.length}`, agentId: payload.agentId, agentName: payload.agentName, messageId: payload.messageId, content: payload.output, timestamp: payload.timestamp ?? Date.now(), sequence: event.sequence, status: payload.status ?? 'running' })
+            lastOutput = outputs[outputs.length - 1]
+          }
           continue
         }
         if (event.type === 'tool_success') {
-          const tool = findOrCreateToolCall(assistant, event.payload.toolCallId)
+          lastOutput = undefined
+          const tool = findOrCreateToolCall(assistant, event.payload, event.sequence)
+          updateToolMetadata(tool, event.payload)
           tool.status = 'success'
+          tool.completedAt ??= event.payload.timestamp ?? Date.now()
           continue
         }
         if (event.type === 'ask') {
@@ -114,7 +177,7 @@ export const useConversationStore = defineStore('conversation', () => {
           assistant.status = 'failed'
           assistant.error = event.payload.message
         } else if (event.type === 'message.done' || event.type === 'done') {
-          if (eventConversationId === undefined || eventConversationId === streamedConversationId) assistant.status = 'completed'
+          if (assistant.status !== 'failed' && (eventConversationId === undefined || eventConversationId === streamedConversationId)) assistant.status = 'completed'
         }
       }
       if (assistant.status === 'streaming') assistant.status = abortController.value?.signal.aborted ? 'cancelled' : 'completed'
@@ -122,7 +185,7 @@ export const useConversationStore = defineStore('conversation', () => {
       if (awaitingInput) assistant.status = 'awaiting-input'
       else if (abortController.value?.signal.aborted) assistant.status = 'cancelled'
       else { assistant.status = 'failed'; assistant.error = error instanceof Error ? error.message : '流式响应失败' }
-    } finally { sending.value = false; abortController.value = null }
+    } finally { settleAgentProgress(assistant); sending.value = false; abortController.value = null }
   }
 
   async function send(content: string) {

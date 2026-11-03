@@ -44,6 +44,17 @@ describe('parseSseEvent', () => {
     const event = parseSseEvent('data: {"type":"ask","sequence":4,"payload":{"question":"请选择城市","ui_type":"select","options":["北京","上海"]}}')
     expect(event).toMatchObject({ type: 'ask', sequence: 0, payload: { delta: { question: '请选择城市', ui_type: 'select', options: ['北京', '上海'] } } })
   })
+  it('preserves resume identifiers when an input-wrapped ask is nested under payload', () => {
+    const event = parseSseEvent('data: {"type":"ask","payload":{"conversationId":7,"toolCallId":"ask-call-7","input":{"question":"请选择城市","ui_type":"select","options":["北京","上海"]}}}')
+    expect(event).toMatchObject({
+      type: 'ask',
+      payload: {
+        conversationId: 7,
+        toolCallId: 'ask-call-7',
+        delta: { question: '请选择城市', ui_type: 'select', options: ['北京', '上海'] },
+      },
+    })
+  })
   it('recognizes a direct ask prompt without event metadata or tool id', () => {
     const event = parseSseEvent('data: "{\\"question\\":\\"请选择城市\\",\\"ui_type\\":\\"select\\",\\"options\\":[\\"北京\\",\\"上海\\"]}"')
     expect(event).toMatchObject({ type: 'ask', payload: { delta: { question: '请选择城市', ui_type: 'select' } } })

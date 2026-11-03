@@ -49,10 +49,14 @@ describe('conversation store', () => {
     expect(store.messages.at(-1)?.content).toContain('差旅建议')
     expect(store.messages.at(-1)?.status).toBe('completed')
   })
-  it('defers backend conversation creation until the first message', async () => {
-    const create = vi.spyOn(conversationApi, 'create')
-    vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (): AsyncGenerator<StreamEvent> {
-      yield { version: 1, type: 'done', sequence: 0, payload: { conversationId: 88 } }
+  it('creates a backend conversation before the first chat request and sends its id', async () => {
+    const create = vi.spyOn(conversationApi, 'create').mockResolvedValue({
+      id: 88, title: 'Plan trip', status: 'ACTIVE', messageCount: 0, createTime: new Date().toISOString(),
+    })
+    let streamedConversationId: number | null | undefined
+    vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (conversationId): AsyncGenerator<StreamEvent> {
+      streamedConversationId = conversationId
+      yield { version: 1, type: 'ask', sequence: 0, payload: { toolCallId: 'ask-call-88', delta: { question: '补充信息？', ui_type: 'text' } } }
     })
     const store = useConversationStore()
 
@@ -62,8 +66,23 @@ describe('conversation store', () => {
     expect(store.messages).toEqual([])
 
     await store.send('Plan trip')
-    expect(create).not.toHaveBeenCalled()
+    expect(create).toHaveBeenCalledWith('Plan trip')
+    expect(streamedConversationId).toBe(88)
     expect(store.activeId).toBe(88)
+    expect(store.messages[0]?.conversationId).toBe(88)
+    await store.answerAsk(store.messages.at(-1)!, 'Shanghai')
+    expect(store.messages.at(-1)?.conversationId).toBe(88)
+  })
+  it('does not start chat when conversation creation returns an invalid id', async () => {
+    vi.spyOn(conversationApi, 'create').mockResolvedValue({
+      id: 0, title: 'Plan trip', status: 'ACTIVE', messageCount: 0,
+    })
+    const stream = vi.spyOn(conversationApi, 'stream')
+    const store = useConversationStore()
+
+    await expect(store.send('Plan trip')).rejects.toThrow('创建会话接口未返回有效会话号')
+    expect(stream).not.toHaveBeenCalled()
+    expect(store.activeId).toBeNull()
   })
   it('normalizes uppercase history roles so user messages stay on the right after refresh', async () => {
     appConfig.enableMock = false

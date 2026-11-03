@@ -52,12 +52,17 @@ watch(() => conversations.workflowEvents.length, async () => {
 
 async function send(text: string) {
   autoScroll.value = true
-  try { await conversations.send(text) } catch { composer.value?.setDraft(text); ElMessage.error('消息发送失败，请稍后重试') }
+  try { await conversations.send(text) } catch (error) {
+    composer.value?.setDraft(text)
+    ElMessage.error(error instanceof Error ? error.message : '消息发送失败，请稍后重试')
+  }
 }
 async function submitAsk(message: ConversationMessageData, _value: unknown, display: string) {
   if (message.askStatus === 'submitted' || conversations.sending) return
   autoScroll.value = true
-  try { await conversations.answerAsk(message, display) } catch { composer.value?.setDraft(display); ElMessage.error('回答发送失败，请重试') }
+  try { await conversations.answerAsk(message, display) } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '回答发送失败，请重试')
+  }
 }
 function starter(text: string) { composer.value?.setDraft(text) }
 </script>

@@ -113,6 +113,8 @@ export const useConversationStore = defineStore('conversation', () => {
           streamedConversationId = eventConversationId
           adoptConversation(eventConversationId, content, userMessage, assistant)
         }
+        // The ask frame may precede the terminal frame that carries a new conversation ID.
+        if (awaitingInput) continue
         if (event.type === 'tool_start') {
           lastOutput = undefined
           const tool = findOrCreateToolCall(assistant, event.payload, event.sequence)
@@ -166,7 +168,7 @@ export const useConversationStore = defineStore('conversation', () => {
           assistant.askStatus = 'pending'
           assistant.status = 'awaiting-input'
           awaitingInput = true
-          break
+          continue
         }
         if (event.type === 'workflow.update' || event.type === 'action.confirmation_required') workflowEvents.value.push(event)
         if (event.type === 'message.delta') {
@@ -192,7 +194,14 @@ export const useConversationStore = defineStore('conversation', () => {
     if (!content.trim() || sending.value) return
     sending.value = true
     try {
-      const conversationId = activeId.value
+      let conversationId = activeId.value
+      if (conversationId === null) {
+        const conversation = await conversationApi.create(content.trim().slice(0, 24))
+        conversationId = conversation.id
+        if (!Number.isFinite(conversationId) || conversationId <= 0) throw new Error('创建会话接口未返回有效会话号')
+        activeId.value = conversationId
+        if (!conversations.value.some((item) => item.id === conversationId)) conversations.value.unshift(conversation)
+      }
       const userMessage = await conversationApi.sendMessage(conversationId, content.trim())
       messages.value.push(userMessage)
       const assistant = reactive<ConversationMessage>({ id: Date.now() + 1, conversationId: conversationId ?? 0, role: 'assistant', content: '', status: 'streaming', sequence: -1 })
@@ -207,7 +216,9 @@ export const useConversationStore = defineStore('conversation', () => {
     if (sending.value || message.askStatus !== 'pending' || message.status !== 'awaiting-input') return
     if (!message.askToolCallId) throw new Error('缺少工具调用标识，无法恢复会话，请重新发起问题')
     const conversationId = message.conversationId > 0 ? message.conversationId : activeId.value
-    if (conversationId === null || conversationId <= 0) throw new Error('缺少有效的会话号，无法恢复会话，请重新发起问题')
+    if (conversationId === null || !Number.isFinite(conversationId) || conversationId <= 0) {
+      throw new Error(`会话号无效（ask 消息：${message.conversationId}，当前会话：${activeId.value ?? '空'}），无法恢复会话，请重新发起问题`)
+    }
     message.askStatus = 'submitted'
     sending.value = true
     try {

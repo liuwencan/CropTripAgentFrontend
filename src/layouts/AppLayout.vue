@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, ChatLineRound, Close, Document, Expand, Fold, Plus, Search, Setting, SwitchButton, User } from '@element-plus/icons-vue'
+import { ArrowDown, Calendar, ChatLineRound, Close, Document, Expand, Fold, Plus, Search, Setting, SwitchButton, User, Tickets } from '@element-plus/icons-vue'
 import TravelBrand from '@/components/TravelBrand.vue'
 import { useAuthStore } from '@/store/auth'
 import { useConversationStore } from '@/store/conversation'
@@ -21,12 +21,16 @@ const loadError = ref('')
 const sidebar = ref<HTMLElement>()
 let previousFocus: HTMLElement | null = null
 const isAdmin = computed(() => auth.isAdmin && appConfig.features.admin)
-const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
+const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/trips': '我的行程' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
 const adminLinks = [
   { path: '/admin/users', label: '用户管理', icon: User },
   { path: '/admin/config', label: '系统配置', icon: Setting },
   { path: '/admin/prompts', label: 'Prompt 管理', icon: Document },
 ]
+const tripLinks = computed(() => [
+  ...(isAdmin.value ? [{ path: '/admin/trips', label: '行程管理', icon: Tickets }] : []),
+  { path: '/trips', label: '我的行程', icon: Calendar },
+])
 const groups = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const week = today.getTime() - 6 * 86400000
@@ -125,8 +129,11 @@ async function signOut() {
     <div class="app-body" :inert="mobileOpen">
       <header class="app-header">
         <div class="header-context"><button class="icon-button mobile-toggle" aria-label="打开会话侧栏" aria-controls="conversation-sidebar" :aria-expanded="mobileOpen" @click="mobileOpen = !mobileOpen"><el-icon><Expand /></el-icon></button><RouterLink v-if="route.path.startsWith('/admin')" class="workspace-return" to="/workspace">差旅助手</RouterLink><span v-if="route.path.startsWith('/admin')" class="context-divider">/</span><span class="current-page-title">{{ pageTitle }}</span></div>
-        <nav v-if="isAdmin" class="admin-nav" aria-label="管理员菜单"><RouterLink v-for="link in adminLinks" :key="link.path" :to="link.path" class="admin-nav-link"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</RouterLink></nav>
-        <el-dropdown v-if="isAdmin" trigger="click" class="admin-mobile"><button class="admin-menu-button">管理菜单<el-icon><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="link in adminLinks" :key="link.path" @click="router.push(link.path)">{{ link.label }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+        <div class="header-nav-group">
+          <nav class="trip-nav" aria-label="行程入口"><RouterLink v-for="link in tripLinks" :key="link.path" :to="link.path" class="admin-nav-link"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</RouterLink></nav>
+          <nav v-if="isAdmin" class="admin-nav" aria-label="管理员菜单"><RouterLink v-for="link in adminLinks" :key="link.path" :to="link.path" class="admin-nav-link"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</RouterLink></nav>
+          <el-dropdown trigger="click" class="admin-mobile"><button class="admin-menu-button">行程<el-icon><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="link in tripLinks" :key="link.path" @click="router.push(link.path)">{{ link.label }}</el-dropdown-item><template v-if="isAdmin"><el-dropdown-item v-for="link in adminLinks" :key="link.path" @click="router.push(link.path)">{{ link.label }}</el-dropdown-item></template></el-dropdown-menu></template></el-dropdown>
+        </div>
       </header>
       <main id="main-content" class="app-main" :class="{ 'workspace-main': route.name === 'workspace' }"><RouterView /></main>
     </div>
@@ -171,6 +178,8 @@ async function signOut() {
 .account-details small { color: var(--text-muted); font-size: 11px; }
 .app-body { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
 .app-header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 20px; height: 68px; padding: 0 32px; }
+.header-nav-group { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+.trip-nav { display: flex; gap: 7px; flex-shrink: 0; padding-right: 12px; border-right: 1px solid var(--line); }
 .header-context { display: flex; align-items: center; gap: 14px; min-width: 0; color: var(--text); font-size: 14px; }
 .current-page-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-return { flex-shrink: 0; color: var(--text-muted); text-decoration: none; }
@@ -191,8 +200,8 @@ async function signOut() {
 .sidebar-collapsed .sidebar-actions { justify-content: center; }
 .sidebar-collapsed .new-chat-button { padding: 0; justify-content: center; }
 .sidebar-collapsed .account-button { padding: 7px; justify-content: center; }
-@media (max-width: 1050px) { .app-header { padding: 0 22px; }.admin-nav-link { padding: 9px 7px; }.admin-nav { gap: 2px; } }
-@media (max-width: 900px) { .admin-nav { display: none; }.admin-mobile { display: inline-flex; } }
+@media (max-width: 1050px) { .app-header { padding: 0 22px; }.admin-nav-link { padding: 9px 7px; }.admin-nav { gap: 2px; }.header-nav-group { gap: 10px; } }
+@media (max-width: 900px) { .admin-nav { display: none; }.admin-mobile { display: inline-flex; }.trip-nav { display: none; } }
 @media (max-width: 720px) {
   .app-shell, .app-shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
   .app-sidebar { display: none; }

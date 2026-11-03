@@ -10,6 +10,8 @@ export const router = createRouter({
     { path: '/', component: () => import('@/layouts/AppLayout.vue').catch(() => import('@/views/ErrorView.vue')), children: [
       { path: '', redirect: '/workspace' },
       { path: 'workspace', name: 'workspace', component: () => import('@/views/WorkspaceView.vue') },
+      { path: 'trips', name: 'my-trips', component: () => import('@/views/MyTripsView.vue') },
+      { path: 'admin/trips', name: 'admin-trips', component: () => import('@/views/admin/TripManagementView.vue'), meta: { admin: true } },
       { path: 'admin/users', name: 'admin-users', component: () => import('@/views/admin/UserManagementView.vue'), meta: { admin: true } },
       { path: 'admin/config', name: 'admin-config', component: () => import('@/views/admin/ConfigManagementView.vue'), meta: { admin: true } },
       { path: 'admin/prompts', name: 'admin-prompts', component: () => import('@/views/admin/PromptManagementView.vue'), meta: { admin: true } },

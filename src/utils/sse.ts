@@ -68,15 +68,27 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
       return { version: 1, type: 'message.done', sequence: typeof payload.sequence === 'number' ? payload.sequence : fallbackSequence, payload }
     }
     const typedAsk = payload.type === 'ask' || payload.event === 'ask' || eventName === 'ask' || isAskPrompt(payload)
-    const askData = parseObject(payload.input) ?? parseObject(payload.delta) ?? parseObject(payload.data) ?? parseObject(payload.payload) ?? payload
+    const nestedPayload = parseObject(payload.payload)
+    const nestedData = parseObject(payload.data)
+    const askData = parseObject(payload.input)
+      ?? parseObject(payload.delta)
+      ?? nestedData
+      ?? parseObject(nestedPayload?.input)
+      ?? parseObject(nestedPayload?.delta)
+      ?? parseObject(nestedPayload?.data)
+      ?? nestedPayload
+      ?? payload
     if (typedAsk && isAskPrompt(askData)) {
+      const metadata = [payload, nestedPayload, nestedData, askData]
+      const conversationId = metadata.find((item) => typeof item?.conversationId === 'number')?.conversationId
+      const toolCallId = metadata.find((item) => typeof item?.toolCallId === 'string')?.toolCallId
       return {
         version: 1,
         type: 'ask',
         sequence: fallbackSequence,
         payload: {
-          ...(typeof payload.conversationId === 'number' ? { conversationId: payload.conversationId } : {}),
-          ...(typeof payload.toolCallId === 'string' ? { toolCallId: payload.toolCallId } : typeof (askData as unknown as Record<string, unknown>).toolCallId === 'string' ? { toolCallId: (askData as unknown as Record<string, unknown>).toolCallId as string } : {}),
+          ...(typeof conversationId === 'number' ? { conversationId } : {}),
+          ...(typeof toolCallId === 'string' ? { toolCallId } : {}),
           delta: askData as AskUserPrompt,
         },
       }

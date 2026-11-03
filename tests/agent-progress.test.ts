@@ -140,7 +140,7 @@ describe('agent timeline presentation', () => {
     expect(wrapper.findAll('.agent-activity').map((node) => node.classes().includes('activity-thinking'))).toEqual([true, false])
   })
 
-  it('toggles each child agent independently and leaves the main agent expanded', async () => {
+  it('toggles each agent independently, including the main agent', async () => {
     const wrapper = mount(AgentProgressTimeline, { props: { tools: [
       tool({ agentName: 'MasterAgent', tooldesc: '读取员工信息', toolCallId: 'main', agentId: 'master' }),
       tool({ agentName: 'OrderManagementAgent', tooldesc: '规划行程', toolCallId: 'trip-1', agentId: 'child-1', timestamp: timestamp + 1 }),
@@ -148,22 +148,38 @@ describe('agent timeline presentation', () => {
     ] }, global: { stubs } })
 
     const buttons = wrapper.findAll('.agent-toggle')
-    expect(buttons).toHaveLength(2)
-    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['true', 'true'])
+    expect(buttons).toHaveLength(3)
+    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['true', 'true', 'true'])
     expect(wrapper.find('.agent-node').exists()).toBe(true)
     const collapsedStates = () => wrapper.findAll('.agent-activities').map((list) => (list.attributes('style') ?? '').includes('display: none'))
     expect(collapsedStates()).toEqual([false, false, false])
 
     await buttons[0]!.trigger('click')
     expect(buttons[0]!.attributes('aria-expanded')).toBe('false')
-    expect(buttons[0]!.attributes('aria-label')).toBe('展开行程单智能体执行过程')
-    expect(buttons[0]!.attributes('title')).toBe('展开行程单智能体执行过程')
-    expect(collapsedStates()).toEqual([false, true, false])
+    expect(buttons[0]!.attributes('aria-label')).toBe('展开主智能体执行过程')
+    expect(buttons[0]!.attributes('title')).toBe('展开主智能体执行过程')
+    expect(collapsedStates()).toEqual([true, false, false])
 
     await buttons[1]!.trigger('click')
+    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['false', 'false', 'true'])
+    await buttons[0]!.trigger('click')
+    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['true', 'false', 'true'])
+  })
+
+  it('collapses all agent activity when the assistant finishes and keeps manual control', async () => {
+    const wrapper = mount(AgentProgressTimeline, { props: { status: 'streaming', tools: [
+      tool({ agentName: 'MasterAgent', toolCallId: 'main', agentId: 'master' }),
+      tool({ agentName: 'OrderManagementAgent', toolCallId: 'child', agentId: 'child', timestamp: timestamp + 1 }),
+    ] }, global: { stubs } })
+    const collapsedStates = () => wrapper.findAll('.agent-activities').map((list) => (list.attributes('style') ?? '').includes('display: none'))
+    expect(collapsedStates()).toEqual([false, false])
+
+    await wrapper.setProps({ status: 'completed' })
+    expect(collapsedStates()).toEqual([true, true])
+    const buttons = wrapper.findAll('.agent-toggle')
     expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['false', 'false'])
     await buttons[0]!.trigger('click')
-    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['true', 'false'])
+    expect(collapsedStates()).toEqual([false, true])
   })
 
   it('shows Chinese agent/tool labels, parameters, output, timestamps and duration', async () => {
@@ -177,7 +193,11 @@ describe('agent timeline presentation', () => {
     expect(wrapper.findAll('time').every((node) => Boolean(node.attributes('datetime')))).toBe(true)
     expect(wrapper.get('.tool-input summary').text()).toBe('调用参数')
     expect(wrapper.get('.tool-input pre').text()).toContain('"scope": "current"')
+    expect(wrapper.get('.tool-output summary').text()).toBe('执行结果')
+    expect(wrapper.get('.tool-output').attributes('open')).toBeUndefined()
     expect(wrapper.get('.tool-output pre').text()).toBe('用户信息已返回')
+    await wrapper.get('.tool-output summary').trigger('click')
+    expect(wrapper.get('.tool-output').attributes('open')).toBeDefined()
     await wrapper.setProps({ tools: [tool({ status: 'suspended' })] })
     expect(wrapper.text()).toContain('已挂起')
     expect(wrapper.text()).not.toContain('执行完成')

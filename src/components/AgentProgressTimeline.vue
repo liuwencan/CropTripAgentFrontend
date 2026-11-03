@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ArrowDown, Check, Clock, Close, Loading, Warning } from '@element-plus/icons-vue'
 import MarkdownContent from './MarkdownContent.vue'
-import type { AgentOutput, ProgressStatus, ToolCall, ToolCallStatus } from '@/types/conversation'
+import type { AgentOutput, AssistantMessageStatus, ProgressStatus, ToolCall, ToolCallStatus } from '@/types/conversation'
 
-const props = defineProps<{ tools?: ToolCall[]; outputs?: AgentOutput[] }>()
+const props = defineProps<{ tools?: ToolCall[]; outputs?: AgentOutput[]; status?: AssistantMessageStatus }>()
 
 type TimelineEntry = { kind: 'tool'; value: ToolCall } | { kind: 'thinking'; value: AgentOutput }
-interface AgentGroup { key: string; agentId?: string | null; name: string; isChild: boolean; entries: TimelineEntry[] }
+interface AgentGroup { key: string; agentId?: string | null; name: string; entries: TimelineEntry[] }
 
 const agentNames: Record<string, string> = {
   MasterAgent: '主智能体',
@@ -40,11 +40,17 @@ const groups = computed(() => {
       const identity = agent.agentId ? `id-${agent.agentId}` : `name-${name}`
       const occurrence = occurrences.get(identity) ?? 0
       occurrences.set(identity, occurrence + 1)
-      result.push({ key: `${identity}-${occurrence}`, agentId: agent.agentId, name, isChild: agent.agentName !== 'MasterAgent' && name !== '主智能体', entries: [entry] })
+      result.push({ key: `${identity}-${occurrence}`, agentId: agent.agentId, name, entries: [entry] })
     }
   }
   return result
 })
+
+watch(() => props.status, (status) => {
+  if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+    collapsedGroups.value = groups.value.map((group) => group.key)
+  }
+}, { immediate: true })
 
 function groupStatus(group: AgentGroup): ToolCallStatus {
   const statuses = group.entries.map((entry) => entry.value.status)
@@ -117,7 +123,7 @@ function duration(tool: ToolCall): string {
           <strong :title="group.agentId || undefined">{{ group.name }}</strong>
           <time v-if="formatTime(group.entries[0]?.value.timestamp)" :datetime="dateTime(group.entries[0]?.value.timestamp)">{{ formatTime(group.entries[0]?.value.timestamp) }}</time>
           <span class="progress-status" role="status">{{ groupStatus(group) === 'running' ? '处理中' : groupStatus(group) === 'completed' ? '已完成' : statusLabels[groupStatus(group)] }}</span>
-          <button v-if="group.isChild" type="button" class="agent-toggle" :aria-expanded="!isCollapsed(group)" :aria-controls="`${group.key}-activities`" :aria-label="`${isCollapsed(group) ? '展开' : '收起'}${group.name}执行过程`" :title="`${isCollapsed(group) ? '展开' : '收起'}${group.name}执行过程`" @click="toggleGroup(group)"><el-icon :class="{ 'is-collapsed': isCollapsed(group) }"><ArrowDown /></el-icon></button>
+          <button type="button" class="agent-toggle" :aria-expanded="!isCollapsed(group)" :aria-controls="`${group.key}-activities`" :aria-label="`${isCollapsed(group) ? '展开' : '收起'}${group.name}执行过程`" :title="`${isCollapsed(group) ? '展开' : '收起'}${group.name}执行过程`" @click="toggleGroup(group)"><el-icon :class="{ 'is-collapsed': isCollapsed(group) }"><ArrowDown /></el-icon></button>
         </div>
         <ol :id="`${group.key}-activities`" v-show="!isCollapsed(group)" class="agent-activities">
           <li v-for="(entry, index) in group.entries" :key="entry.kind === 'tool' ? `${entry.value.agentId}:${entry.value.toolCallId}` : entry.value.id" class="agent-activity" :class="[`is-${entry.value.status}`, `activity-${entry.kind}`]">
@@ -129,7 +135,7 @@ function duration(tool: ToolCall): string {
               </div>
               <div class="tool-meta"><code>{{ entry.value.toolName }}</code><time v-if="formatTime(entry.value.timestamp)" :datetime="dateTime(entry.value.timestamp)">{{ formatTime(entry.value.timestamp) }}<template v-if="entry.value.completedAt !== undefined"> — {{ formatTime(entry.value.completedAt) }}</template></time><span v-if="duration(entry.value)">耗时 {{ duration(entry.value) }}</span></div>
               <details v-if="entry.value.input !== undefined && entry.value.input !== null" class="tool-input"><summary>调用参数</summary><pre>{{ formatValue(entry.value.input) }}</pre></details>
-              <div v-if="entry.value.result !== undefined" class="tool-output"><span class="output-label">执行结果</span><pre>{{ formatValue(entry.value.result) }}</pre></div>
+              <details v-if="entry.value.result !== undefined" class="tool-output"><summary>执行结果</summary><pre>{{ formatValue(entry.value.result) }}</pre></details>
               <p v-else class="result-placeholder">{{ entry.value.status === 'running' ? '等待工具返回结果…' : entry.value.status === 'suspended' ? '等待补充信息或外部处理后继续' : entry.value.status === 'failed' ? '执行失败，未返回结果' : entry.value.status === 'cancelled' ? '已停止，未返回结果' : entry.value.status === 'interrupted' ? '响应已结束，未收到工具结果' : '无文本输出' }}</p>
             </template>
             <template v-else>
@@ -174,8 +180,9 @@ function duration(tool: ToolCall): string {
 .tool-input { margin-top: 9px; color: var(--text-muted); }
 .tool-input summary { width: fit-content; padding: 2px 0; cursor: pointer; font-size: 11px; }
 .tool-input summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.tool-output { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
-.output-label { color: var(--text-muted); font-size: 11px; }
+.tool-output { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); color: var(--text-muted); }
+.tool-output summary { width: fit-content; padding: 2px 0; cursor: pointer; font-size: 11px; }
+.tool-output summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 pre { max-height: 320px; margin: 5px 0 0; overflow: auto; color: #505c70; font: inherit; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
 .result-placeholder { margin: 9px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.6; }
 .activity-thinking { background: transparent; }

@@ -1,4 +1,4 @@
-import type { AskUserPrompt, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
+import type { AgentPlan, AskUserPrompt, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
 
 function extractDelta(value: unknown): string | undefined {
   if (typeof value === 'string') return value
@@ -97,6 +97,11 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
     const progressType = eventName === 'tool_start' || eventName === 'tool_result' || eventName === 'tool_error' || eventName === 'thinking' || eventName === 'tool_success'
       ? eventName : payload.eventType ?? payload.type ?? progress.eventType
     const sequence = typeof payload.sequence === 'number' ? payload.sequence : fallbackSequence
+    if ((eventName === 'plan_update' || payload.type === 'plan_update' || payload.eventType === 'plan_update' || progress.type === 'plan_update')
+      && typeof progress.agentName === 'string' && typeof progress.planName === 'string' && Array.isArray(progress.tasks)) {
+      const { type: _type, eventType: _eventType, ...plan } = progress
+      return { version: 1, type: 'plan_update', sequence, payload: plan as unknown as AgentPlan }
+    }
     if (progressType === 'tool_start' && typeof progress.toolCallId === 'string' && typeof progress.toolName === 'string') {
       return {
         version: 1,

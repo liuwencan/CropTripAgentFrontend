@@ -65,6 +65,22 @@ describe('parseSseEvent', () => {
     expect(parseSseEvent('event: tool_success\ndata: {"conversationId":25,"toolCallId":"call-1","phase":"completed","state":"success"}')).toMatchObject({ type: 'tool_success', payload: { toolCallId: 'call-1', state: 'success' } })
   })
 
+  it('parses plan_update events with the backend task snapshot', () => {
+    const plan = {
+      type: 'plan_update', agentName: 'ItineraryPlanAgent', planName: '行程规划',
+      tasks: [
+        { idx: 0, name: '搜索航班', state: 'done' },
+        { idx: 1, name: '搜索酒店', state: 'in_progress' },
+        { idx: 2, name: '预订机票', state: 'todo' },
+      ],
+    }
+    expect(parseSseEvent(`event: plan_update\ndata: ${JSON.stringify(plan)}`, 4)).toEqual({
+      version: 1, type: 'plan_update', sequence: 4, payload: {
+        agentName: 'ItineraryPlanAgent', planName: '行程规划', tasks: plan.tasks,
+      },
+    })
+  })
+
   const progress = {
     eventId: 'event-1', eventType: 'tool_result', agentId: 'agent-1', agentName: '主智能体',
     tooldesc: '获取用户信息', timestamp: 1793505600123, toolCallId: 'call-1', toolName: 'get_userinfo',

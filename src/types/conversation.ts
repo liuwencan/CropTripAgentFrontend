@@ -60,6 +60,20 @@ export interface AgentOutput {
   status: ProgressStatus
 }
 
+export type PlanTaskState = 'done' | 'in_progress' | 'todo'
+
+export interface PlanTask {
+  idx: number
+  name: string
+  state: PlanTaskState | string
+}
+
+export interface AgentPlan {
+  agentName: string
+  planName: string
+  tasks: PlanTask[]
+}
+
 export interface ConversationMessage extends Message {
   status?: AssistantMessageStatus
   sequence?: number
@@ -67,6 +81,7 @@ export interface ConversationMessage extends Message {
   error?: string
   toolCalls?: ToolCall[]
   agentOutputs?: AgentOutput[]
+  plans?: AgentPlan[]
   ask?: AskUserPrompt
   askToolCallId?: string
   askStatus?: 'pending' | 'submitted'
@@ -146,6 +161,7 @@ export type StreamEvent =
   | { version: number; type: 'tool_error'; sequence: number; messageId?: number; payload: ToolResultEventPayload }
   | { version: number; type: 'thinking'; sequence: number; messageId?: number; payload: ThinkingEventPayload }
   | { version: number; type: 'tool_success'; sequence: number; messageId?: number; payload: ToolSuccessEventPayload }
+  | { version: number; type: 'plan_update'; sequence: number; messageId?: number; payload: AgentPlan }
   | { version: number; type: 'message.done'; sequence: number; messageId?: number; payload?: ConversationCompletePayload }
   | { version: number; type: 'workflow.update'; sequence: number; messageId?: number; payload: Record<string, unknown> }
   | { version: number; type: 'action.confirmation_required'; sequence: number; messageId?: number; payload: Record<string, unknown> }

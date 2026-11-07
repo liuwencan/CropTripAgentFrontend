@@ -34,7 +34,7 @@ function trackScroll() {
   const el = scroller.value
   if (el) autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 100
 }
-watch(() => conversations.messages.map((message) => [message.content, message.status, message.askStatus, message.toolCalls?.map((tool) => [tool.status, tool.result]), message.agentOutputs?.map((output) => [output.status, output.content])]), async () => {
+watch(() => conversations.messages.map((message) => [message.content, message.status, message.askStatus, message.toolCalls?.map((tool) => [tool.status, tool.result]), message.agentOutputs?.map((output) => [output.status, output.content]), message.plans?.map((plan) => plan.tasks.map((task) => [task.name, task.state]))]), async () => {
   await nextTick()
   if (scroller.value && autoScroll.value) scroller.value.scrollTop = scroller.value.scrollHeight
 })

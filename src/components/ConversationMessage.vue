@@ -6,6 +6,7 @@ import TravelBrand from './TravelBrand.vue'
 import MarkdownContent from './MarkdownContent.vue'
 import AskUserPrompt from './AskUserPrompt.vue'
 import AgentProgressTimeline from './AgentProgressTimeline.vue'
+import AgentPlanList from './AgentPlanList.vue'
 import type { ConversationMessage } from '@/types/conversation'
 import { formatDate } from '@/utils/format'
 
@@ -23,7 +24,8 @@ async function copy() {
     <div v-if="!isUser" class="assistant-identity"><TravelBrand mark-only /><strong>差旅助手</strong><span v-if="showStreamStatus" class="stream-status" role="status">正在整理…</span></div>
     <div class="message-content">
       <AgentProgressTimeline v-if="!isUser" :tools="message.toolCalls" :outputs="message.agentOutputs" :status="message.status" />
-      <div class="message-bubble"><MarkdownContent v-if="!isUser && message.content" :source="message.content" /><p v-else-if="isUser">{{ message.content }}</p><p v-else-if="message.status === 'streaming' && !message.toolCalls?.length && !message.agentOutputs?.length" class="stream-placeholder">正在整理你的需求…</p></div>
+      <AgentPlanList v-if="!isUser && message.plans?.length" :plans="message.plans" />
+      <div class="message-bubble"><MarkdownContent v-if="!isUser && message.content" :source="message.content" /><p v-else-if="isUser">{{ message.content }}</p><p v-else-if="message.status === 'streaming' && !message.toolCalls?.length && !message.agentOutputs?.length && !message.plans?.length" class="stream-placeholder">正在整理你的需求…</p></div>
       <AskUserPrompt v-if="!isUser && message.ask" :prompt="message.ask" :submitted="message.askStatus === 'submitted'" @submit="(value, display) => emit('askSubmit', message, value, display)" />
       <div v-if="message.status === 'failed'" class="message-error" role="alert"><span>{{ message.error || '响应失败，请重试' }}</span><el-button link type="primary" :icon="Refresh" @click="emit('retry', message)">重新生成</el-button></div>
       <div v-else-if="message.status === 'cancelled'" class="message-error"><span>已停止生成</span><el-button link type="primary" @click="emit('retry', message)">重新生成</el-button></div>

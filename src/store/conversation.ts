@@ -162,6 +162,14 @@ export const useConversationStore = defineStore('conversation', () => {
           tool.completedAt ??= event.payload.timestamp ?? Date.now()
           continue
         }
+        if (event.type === 'plan_update') {
+          assistant.plans ??= []
+          const plans = assistant.plans
+          const existing = plans.find((plan) => plan.agentName === event.payload.agentName && plan.planName === event.payload.planName)
+          if (existing) existing.tasks = event.payload.tasks
+          else plans.push({ ...event.payload, tasks: [...event.payload.tasks] })
+          continue
+        }
         if (event.type === 'ask') {
           assistant.ask = event.payload.delta
           assistant.askToolCallId = event.payload.toolCallId

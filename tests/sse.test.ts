@@ -112,4 +112,21 @@ describe('parseSseEvent', () => {
     expect(parseSseEvent('data:{"type":"tool_result","sequence":1,"payload":{"toolCallId":null}}')).toBeNull()
     expect(parseSseEvent('event:thinking\ndata:{"eventType":"thinking","output":null}')).toBeNull()
   })
+
+  it('parses intent lifecycle events with a raw trace id', () => {
+    expect(parseSseEvent('event: intent_start\ndata: trace-123', 4)).toEqual({ version: 1, type: 'intent_start', sequence: 4, payload: { traceId: 'trace-123' } })
+    expect(parseSseEvent('event: intent_end\ndata: "trace-123"', 9)).toEqual({ version: 1, type: 'intent_end', sequence: 9, payload: { traceId: 'trace-123' } })
+  })
+
+  it('parses intent progress and recognition summaries', () => {
+    expect(parseSseEvent('event: intent_progress\ndata: {"traceId":"trace-123","stage":"rule_matching","status":"completed","message":"规则匹配完成","pass":"original","level":"L1"}', 5)).toMatchObject({
+      type: 'intent_progress', sequence: 5, payload: { traceId: 'trace-123', stage: 'rule_matching', status: 'completed', pass: 'original', level: 'L1' },
+    })
+    expect(parseSseEvent('event: recognition_result\ndata: {"traceId":"trace-123","status":"completed","message":"意图识别完成","level":"L1","intents":["BOOK_TRAVEL"],"isMultiIntent":false}')).toMatchObject({
+      type: 'recognition_result', payload: { stage: 'recognition_result', intents: ['BOOK_TRAVEL'], isMultiIntent: false },
+    })
+    expect(parseSseEvent('event: intent_progress\ndata: {"traceId":"trace-123","stage":"question_rewrite","status":"completed","message":"问题改写完成","rewrittenQuestion":"帮我预订下周一从上海到北京的机票"}')).toMatchObject({
+      type: 'intent_progress', payload: { stage: 'question_rewrite', rewrittenQuestion: '帮我预订下周一从上海到北京的机票' },
+    })
+  })
 })

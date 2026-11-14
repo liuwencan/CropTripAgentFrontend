@@ -16,12 +16,15 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
-    "dompurify": "^3.2.6",
     "element-plus": "^2.9.11",
-    "marked": "^15.0.7",
+    "katex": "^0.16.47",
+    "mermaid": "^11.17.2",
     "pinia": "^3.0.3",
+    "shiki": "^3.23.0",
+    "shiki-stream": "^0.1.4",
     "vue": "^3.5.22",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "x-markdown-vue": "^0.0.204"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",

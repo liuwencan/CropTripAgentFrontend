@@ -74,6 +74,22 @@ export interface AgentPlan {
   tasks: PlanTask[]
 }
 
+export interface IntentLifecyclePayload {
+  traceId: string
+}
+
+export interface IntentProgressPayload {
+  traceId: string
+  stage: string
+  status: string
+  message: string
+  pass?: string
+  level?: string
+  rewrittenQuestion?: string
+  intents?: string[]
+  isMultiIntent?: boolean
+}
+
 export interface ConversationMessage extends Message {
   status?: AssistantMessageStatus
   sequence?: number
@@ -82,10 +98,17 @@ export interface ConversationMessage extends Message {
   toolCalls?: ToolCall[]
   agentOutputs?: AgentOutput[]
   plans?: AgentPlan[]
+  intentEvents?: IntentEvent[]
   ask?: AskUserPrompt
   askToolCallId?: string
   askStatus?: 'pending' | 'submitted'
 }
+
+export type IntentEvent =
+  | { version: number; type: 'intent_start'; sequence: number; payload: IntentLifecyclePayload }
+  | { version: number; type: 'intent_progress'; sequence: number; payload: IntentProgressPayload }
+  | { version: number; type: 'recognition_result'; sequence: number; payload: IntentProgressPayload }
+  | { version: number; type: 'intent_end'; sequence: number; payload: IntentLifecyclePayload }
 
 export type AskUserUiType = 'text' | 'select' | 'multi_select' | 'confirm' | 'form' | 'date' | 'number'
 
@@ -165,5 +188,6 @@ export type StreamEvent =
   | { version: number; type: 'message.done'; sequence: number; messageId?: number; payload?: ConversationCompletePayload }
   | { version: number; type: 'workflow.update'; sequence: number; messageId?: number; payload: Record<string, unknown> }
   | { version: number; type: 'action.confirmation_required'; sequence: number; messageId?: number; payload: Record<string, unknown> }
+  | IntentEvent
   | { version: number; type: 'error'; sequence: number; messageId?: number; payload: { message: string } }
   | { version: number; type: 'done'; sequence: number; messageId?: number; payload?: ConversationCompletePayload }

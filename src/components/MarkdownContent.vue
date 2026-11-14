@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { renderMarkdown } from '@/utils/markdown'
+import { MarkdownRenderer } from 'x-markdown-vue'
+import 'katex/dist/katex.min.css'
+import 'x-markdown-vue/style'
 
-const props = defineProps<{ source: string }>()
-const html = computed(() => renderMarkdown(props.source))
+defineProps<{ source: string }>()
 </script>
 
-<template><div class="markdown-body" v-html="html" /></template>
+<template>
+  <MarkdownRenderer
+    class="x-md-renderer markdown-body"
+    :markdown="source"
+    :allow-html="false"
+    :sanitize="true"
+    :style="{ backgroundColor: 'transparent', color: 'inherit', padding: '0' }"
+  />
+</template>

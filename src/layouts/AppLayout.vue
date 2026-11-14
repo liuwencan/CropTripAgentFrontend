@@ -2,8 +2,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Calendar, ChatLineRound, Close, Document, Expand, Fold, Plus, Search, Setting, SwitchButton, User, Tickets } from '@element-plus/icons-vue'
+import { ArrowDown, Calendar, ChatLineRound, Close, Document, Expand, Fold, Plus, Search, Setting, Star, SwitchButton, User, Tickets } from '@element-plus/icons-vue'
 import TravelBrand from '@/components/TravelBrand.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import { useAuthStore } from '@/store/auth'
 import { useConversationStore } from '@/store/conversation'
 import { appConfig } from '@/config'
@@ -21,7 +22,8 @@ const loadError = ref('')
 const sidebar = ref<HTMLElement>()
 let previousFocus: HTMLElement | null = null
 const isAdmin = computed(() => auth.isAdmin && appConfig.features.admin)
-const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/trips': '我的行程' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
+const displayName = computed(() => auth.user?.nickName?.trim() || auth.user?.username || '用户')
+const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/trips': '我的行程', '/preferences': '偏好设置' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
 const adminLinks = [
   { path: '/admin/users', label: '用户管理', icon: User },
   { path: '/admin/config', label: '系统配置', icon: Setting },
@@ -30,6 +32,7 @@ const adminLinks = [
 const tripLinks = computed(() => [
   ...(isAdmin.value ? [{ path: '/admin/trips', label: '行程管理', icon: Tickets }] : []),
   { path: '/trips', label: '我的行程', icon: Calendar },
+  { path: '/preferences', label: '偏好设置', icon: Star },
 ])
 const groups = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -104,7 +107,7 @@ async function signOut() {
     <button v-if="mobileOpen" class="sidebar-backdrop" aria-label="关闭会话侧栏" @click="mobileOpen = false" />
     <aside id="conversation-sidebar" ref="sidebar" class="app-sidebar" :role="mobileOpen ? 'dialog' : undefined" :aria-modal="mobileOpen ? true : undefined" aria-label="会话与账号" @keydown="trapFocus">
       <div class="sidebar-brand-row">
-        <RouterLink to="/workspace" class="brand-link" aria-label="企业差旅助手首页"><TravelBrand :compact="collapsed" /></RouterLink>
+        <RouterLink to="/workspace" class="brand-link" aria-label="途灵首页"><TravelBrand :compact="collapsed" /></RouterLink>
         <button class="icon-button sidebar-fold" :aria-label="collapsed ? '展开侧栏' : '收起侧栏'" :title="collapsed ? '展开侧栏' : '收起侧栏'" @click="collapsed = !collapsed"><el-icon><Expand v-if="collapsed" /><Fold v-else /></el-icon></button>
         <button class="icon-button mobile-close" aria-label="关闭会话侧栏" @click="mobileOpen = false"><el-icon><Close /></el-icon></button>
       </div>
@@ -122,13 +125,12 @@ async function signOut() {
         </template>
       </div>
       <div class="sidebar-bottom">
-        <div class="internal-label sidebar-label"><span />企业内部工作空间</div>
-        <el-dropdown trigger="click" placement="top-start" class="account-dropdown"><button class="account-button" aria-label="账号菜单"><span class="account-avatar">{{ auth.user?.username?.slice(0, 1).toUpperCase() || 'U' }}</span><span class="account-details sidebar-label"><strong>{{ auth.user?.username }}</strong><small>{{ auth.isAdmin ? '管理员' : '企业员工' }}</small></span><el-icon class="sidebar-label"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="signOut"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+        <el-dropdown trigger="click" placement="top-start" class="account-dropdown"><button class="account-button" :aria-label="`${displayName}，账号菜单`"><UserAvatar class="account-avatar" :src="auth.user?.avatar" :name="displayName" :size="34" /><span class="account-details sidebar-label"><strong>{{ displayName }}</strong><small>{{ auth.isAdmin ? '管理员' : '企业员工' }}</small></span><el-icon class="sidebar-label"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="signOut"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
       </div>
     </aside>
     <div class="app-body" :inert="mobileOpen">
       <header class="app-header">
-        <div class="header-context"><button class="icon-button mobile-toggle" aria-label="打开会话侧栏" aria-controls="conversation-sidebar" :aria-expanded="mobileOpen" @click="mobileOpen = !mobileOpen"><el-icon><Expand /></el-icon></button><RouterLink v-if="route.path.startsWith('/admin')" class="workspace-return" to="/workspace">差旅助手</RouterLink><span v-if="route.path.startsWith('/admin')" class="context-divider">/</span><span class="current-page-title">{{ pageTitle }}</span></div>
+        <div class="header-context"><button class="icon-button mobile-toggle" aria-label="打开会话侧栏" aria-controls="conversation-sidebar" :aria-expanded="mobileOpen" @click="mobileOpen = !mobileOpen"><el-icon><Expand /></el-icon></button><RouterLink v-if="route.path.startsWith('/admin')" class="workspace-return" to="/workspace">途灵</RouterLink><span v-if="route.path.startsWith('/admin')" class="context-divider">/</span><span class="current-page-title">{{ pageTitle }}</span></div>
         <div class="header-nav-group">
           <nav class="trip-nav" aria-label="行程入口"><RouterLink v-for="link in tripLinks" :key="link.path" :to="link.path" class="admin-nav-link"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</RouterLink></nav>
           <nav v-if="isAdmin" class="admin-nav" aria-label="管理员菜单"><RouterLink v-for="link in adminLinks" :key="link.path" :to="link.path" class="admin-nav-link"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</RouterLink></nav>
@@ -172,7 +174,7 @@ async function signOut() {
 .account-dropdown { width: 100%; }
 .account-button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; color: var(--text); }
 .account-button:hover { background: #e9ecf1; }
-.account-avatar { display: grid; flex: 0 0 32px; height: 32px; place-items: center; border: 1px solid #dce2ec; border-radius: 50%; background: #e9edf5; color: #586984; font-size: 13px; font-weight: 600; }
+.account-avatar { border-color: #dce2ec; }
 .account-details { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5px; }
 .account-details strong { overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 500; }
 .account-details small { color: var(--text-muted); font-size: 11px; }

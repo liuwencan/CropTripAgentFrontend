@@ -1,4 +1,4 @@
-import type { AgentPlan, AskUserPrompt, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
+import type { AgentPlan, AskUserPrompt, IntentProgressPayload, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
 
 function extractDelta(value: unknown): string | undefined {
   if (typeof value === 'string') return value
@@ -38,6 +38,16 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
     .map((line) => line.slice(5).replace(/^ /, ''))
   if (!dataLines.length) return null
   const data = dataLines.join('\n')
+  const sequence = fallbackSequence
+  if (eventName === 'intent_start' || eventName === 'intent_end') {
+    let traceId = data.trim().replace(/^"|"$/g, '')
+    try {
+      const lifecycle = JSON.parse(data) as unknown
+      if (typeof lifecycle === 'string') traceId = lifecycle
+      else if (lifecycle && typeof lifecycle === 'object' && !Array.isArray(lifecycle) && typeof (lifecycle as Record<string, unknown>).traceId === 'string') traceId = (lifecycle as Record<string, string>).traceId
+    } catch { /* The documented lifecycle payload is a raw trace id. */ }
+    if (traceId) return { version: 1, type: eventName, sequence, payload: { traceId } }
+  }
   let parsed: unknown
   try {
     parsed = JSON.parse(data) as unknown
@@ -48,6 +58,9 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
     return null
   }
   if (typeof parsed === 'string') {
+    if (eventName === 'intent_start' || eventName === 'intent_end') {
+      return { version: 1, type: eventName, sequence, payload: { traceId: parsed } }
+    }
     try { parsed = JSON.parse(parsed) as unknown } catch { return null }
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
@@ -93,20 +106,41 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
         },
       }
     }
-    const progress = parseObject(payload.payload) ?? payload
+    const progressData = parseObject(payload.data)
+    const progress = parseObject(payload.payload) ?? progressData ?? payload
     const progressType = eventName === 'tool_start' || eventName === 'tool_result' || eventName === 'tool_error' || eventName === 'thinking' || eventName === 'tool_success'
-      ? eventName : payload.eventType ?? payload.type ?? progress.eventType
-    const sequence = typeof payload.sequence === 'number' ? payload.sequence : fallbackSequence
+      ? eventName : payload.eventType ?? payload.type ?? progress.eventType ?? progress.type
+    const eventSequence = typeof payload.sequence === 'number' ? payload.sequence : fallbackSequence
+    const intentType = eventName === 'intent_progress' || eventName === 'recognition_result'
+      ? eventName : progressType === 'intent_progress' || progressType === 'recognition_result' ? progressType : undefined
+    if (intentType) {
+      const traceId = [progress.traceId, payload.traceId].find((value): value is string => typeof value === 'string')
+      const stage = typeof progress.stage === 'string' ? progress.stage : intentType === 'recognition_result' ? 'recognition_result' : undefined
+      if (traceId && stage) {
+        const intentPayload: IntentProgressPayload = {
+          traceId,
+          stage,
+          status: typeof progress.status === 'string' ? progress.status : intentType === 'recognition_result' ? 'completed' : 'started',
+          message: typeof progress.message === 'string' ? progress.message : stage,
+          ...(typeof progress.pass === 'string' ? { pass: progress.pass } : {}),
+          ...(typeof progress.level === 'string' ? { level: progress.level } : {}),
+          ...(typeof progress.rewrittenQuestion === 'string' ? { rewrittenQuestion: progress.rewrittenQuestion } : {}),
+          ...(Array.isArray(progress.intents) ? { intents: progress.intents.filter((intent): intent is string => typeof intent === 'string') } : {}),
+          ...(typeof progress.isMultiIntent === 'boolean' ? { isMultiIntent: progress.isMultiIntent } : {}),
+        }
+        return { version: 1, type: intentType, sequence: eventSequence, payload: intentPayload }
+      }
+    }
     if ((eventName === 'plan_update' || payload.type === 'plan_update' || payload.eventType === 'plan_update' || progress.type === 'plan_update')
       && typeof progress.agentName === 'string' && typeof progress.planName === 'string' && Array.isArray(progress.tasks)) {
       const { type: _type, eventType: _eventType, ...plan } = progress
-      return { version: 1, type: 'plan_update', sequence, payload: plan as unknown as AgentPlan }
+      return { version: 1, type: 'plan_update', sequence: eventSequence, payload: plan as unknown as AgentPlan }
     }
     if (progressType === 'tool_start' && typeof progress.toolCallId === 'string' && typeof progress.toolName === 'string') {
       return {
         version: 1,
         type: 'tool_start',
-        sequence,
+        sequence: eventSequence,
         payload: progress as unknown as ToolStartEventPayload,
       }
     }
@@ -114,18 +148,18 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
       return {
         version: 1,
         type: progressType,
-        sequence,
+        sequence: eventSequence,
         payload: progress as unknown as ToolResultEventPayload,
       }
     }
     if (progressType === 'thinking' && typeof progress.output === 'string') {
-      return { version: 1, type: 'thinking', sequence, payload: progress as unknown as ThinkingEventPayload }
+      return { version: 1, type: 'thinking', sequence: eventSequence, payload: progress as unknown as ThinkingEventPayload }
     }
     if (progressType === 'tool_success' && typeof progress.toolCallId === 'string') {
       return {
         version: 1,
         type: 'tool_success',
-        sequence,
+        sequence: eventSequence,
         payload: progress as unknown as ToolSuccessEventPayload,
       }
     }

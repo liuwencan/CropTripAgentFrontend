@@ -8,12 +8,14 @@ import TravelBrand from '@/components/TravelBrand.vue'
 import TravelWorkflowBlock from '@/components/TravelWorkflowBlock.vue'
 import { useConversationStore } from '@/store/conversation'
 import { useWorkflowStore } from '@/store/workflow'
+import { useAuthStore } from '@/store/auth'
 import type { ConversationMessage as ConversationMessageData } from '@/types/conversation'
 import type { WorkflowBlock } from '@/types/workflow'
 import { appConfig } from '@/config'
 
 const conversations = useConversationStore()
 const workflow = useWorkflowStore()
+const auth = useAuthStore()
 const scroller = ref<HTMLElement>()
 const composer = ref<InstanceType<typeof MessageComposer>>()
 const autoScroll = ref(true)
@@ -34,7 +36,7 @@ function trackScroll() {
   const el = scroller.value
   if (el) autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 100
 }
-watch(() => conversations.messages.map((message) => [message.content, message.status, message.askStatus, message.toolCalls?.map((tool) => [tool.status, tool.result]), message.agentOutputs?.map((output) => [output.status, output.content]), message.plans?.map((plan) => plan.tasks.map((task) => [task.name, task.state]))]), async () => {
+watch(() => conversations.messages.map((message) => [message.content, message.status, message.askStatus, message.intentEvents?.map((event) => event.type === 'intent_progress' || event.type === 'recognition_result' ? [event.type, event.sequence, event.payload.status, event.payload.stage] : [event.type, event.sequence]), message.toolCalls?.map((tool) => [tool.status, tool.result]), message.agentOutputs?.map((output) => [output.status, output.content]), message.plans?.map((plan) => plan.tasks.map((task) => [task.name, task.state]))]), async () => {
   await nextTick()
   if (scroller.value && autoScroll.value) scroller.value.scrollTop = scroller.value.scrollHeight
 })
@@ -71,18 +73,17 @@ function starter(text: string) { composer.value?.setDraft(text) }
   <div class="workspace" :class="{ 'is-empty': !hasMessages }">
     <section ref="scroller" class="message-scroll" aria-label="差旅对话" :aria-busy="conversations.sending" @scroll.passive="trackScroll">
       <div v-if="!hasMessages" class="welcome">
-        <div class="welcome-brand"><TravelBrand mark-only /><span>企业差旅助手</span></div>
+        <div class="welcome-brand"><TravelBrand mark-only /><span>途灵</span></div>
         <h1>这次出差，有什么可以帮你？</h1>
         <p>查询差旅标准、规划出行安排，让每一步都有依据。</p>
       </div>
-      <div v-else class="message-thread"><ConversationMessage v-for="message in conversations.messages" :key="message.id" :message="message" @retry="conversations.retry" @ask-submit="submitAsk" /><TravelWorkflowBlock v-for="block in workflowBlocks" :key="block.workflowId" :block="block" @confirm="workflow.confirm" @cancel="workflow.cancel" /></div>
+      <div v-else class="message-thread"><ConversationMessage v-for="message in conversations.messages" :key="message.id" :message="message" :user="auth.user" @retry="conversations.retry" @ask-submit="submitAsk" /><TravelWorkflowBlock v-for="block in workflowBlocks" :key="block.workflowId" :block="block" @confirm="workflow.confirm" @cancel="workflow.cancel" /></div>
     </section>
     <div class="composer-dock">
       <MessageComposer ref="composer" :key="conversations.activeId ?? 'new'" :sending="conversations.sending" @send="send" @stop="conversations.stop" />
       <div v-if="!hasMessages" class="starter-list" aria-label="常用差旅需求"><button v-for="item in starters" :key="item.label" @click="starter(item.text)"><el-icon><component :is="item.icon" /></el-icon>{{ item.label }}</button></div>
-      <p v-if="hasMessages" class="conversation-disclaimer">差旅建议仅供参考，预订与报销请以企业政策及实际确认为准。</p>
     </div>
-    <footer v-if="!hasMessages" class="workspace-footer">差旅建议仅供参考，预订与报销请以企业政策及实际确认为准。</footer>
+    <footer v-if="!hasMessages" class="workspace-footer"></footer>
   </div>
 </template>
 

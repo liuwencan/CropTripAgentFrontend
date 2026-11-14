@@ -31,7 +31,7 @@ export function loadConfig(): AppConfig {
   const apiBaseUrl = cleanBaseUrl(runtime.apiBaseUrl ?? env.VITE_API_BASE_URL ?? '', '')
   const streamBaseUrl = cleanBaseUrl(runtime.streamBaseUrl ?? env.VITE_STREAM_BASE_URL ?? apiBaseUrl, apiBaseUrl)
   const features = { admin: true, travelWorkflow: true, ...(runtime.features ?? {}) }
-  document.title = String(runtime.appTitle ?? env.VITE_APP_TITLE ?? '企业差旅助手')
+  document.title = String(runtime.appTitle ?? env.VITE_APP_TITLE ?? '途灵')
   return {
     apiBaseUrl,
     streamBaseUrl,

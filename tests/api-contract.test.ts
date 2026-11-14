@@ -1,9 +1,28 @@
 import { describe, expect, it, vi } from 'vitest'
+import { authApi } from '@/api/authApi'
 import { configApi } from '@/api/configApi'
 import { promptApi } from '@/api/promptApi'
 import { userApi } from '@/api/userApi'
+import { appConfig } from '@/config'
 
-describe('admin API contracts', () => {
+describe('API contracts', () => {
+  it('registers an account with the public auth endpoint and only supported fields', async () => {
+    const originalMock = appConfig.enableMock
+    appConfig.enableMock = false
+    const user = { id: 8, username: 'alice_1', role: 'USER', mustChangePassword: false }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, data: user }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await expect(authApi.register({ username: 'alice_1', password: 'password123' })).resolves.toEqual(user)
+      expect(fetchMock.mock.calls[0][0]).toBe('/auth/register')
+      expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' })
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ username: 'alice_1', password: 'password123' })
+    } finally {
+      appConfig.enableMock = originalMock
+    }
+  })
+
   it('uses documented query payloads and response page fields', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, data: [{ id: 1, username: 'alice', role: 'USER' }], pageNo: 1, pageSize: 10, totalCount: 1, totalPage: 1 }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

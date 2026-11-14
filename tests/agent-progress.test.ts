@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { watch } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import AgentProgressTimeline from '@/components/AgentProgressTimeline.vue'
+import IntentProgressTimeline from '@/components/IntentProgressTimeline.vue'
 import ConversationMessage from '@/components/ConversationMessage.vue'
 import { conversationApi } from '@/api/conversationApi'
 import { appConfig } from '@/config'
@@ -123,70 +124,61 @@ describe('Hook progress lifecycle', () => {
 const stubs = { 'el-icon': { template: '<span><slot /></span>' }, 'el-button': true }
 const tool = (overrides: Partial<ToolCall> = {}): ToolCall => ({ ...metadata, sequence: 0, result: '用户信息已返回', status: 'completed', completedAt: timestamp + 1500, ...overrides })
 
-describe('agent timeline presentation', () => {
-  it('orders by start timestamp, groups adjacent agent activity and keeps A → B → A', () => {
+describe('tool timeline presentation', () => {
+  it('orders tool calls by timestamp and renders a flat combined tool label', () => {
     const wrapper = mount(AgentProgressTimeline, { props: { tools: [
       tool({ toolCallId: 'last', timestamp: timestamp + 40 }),
       tool({ toolCallId: 'first', timestamp }),
       tool({ toolCallId: 'middle', agentId: 'general-1', agentName: '通用信息智能体', timestamp: timestamp + 20 }),
     ] }, global: { stubs } })
-    expect(wrapper.findAll('.agent-heading > strong').map((node) => node.text())).toEqual(['主智能体', '通用信息智能体', '主智能体'])
+    expect(wrapper.findAll('.agent-heading > strong').map((node) => node.text())).toEqual(['主智能体-获取用户信息', '通用信息智能体-获取用户信息', '主智能体-获取用户信息'])
     expect(wrapper.findAll('.agent-activity')).toHaveLength(3)
+    expect(wrapper.find('.agent-activities').exists()).toBe(false)
+    expect(wrapper.findAll('.agent-toggle')).toHaveLength(0)
   })
 
-  it('uses sequence as a timestamp tie breaker and distinguishes same-name instances', () => {
+  it('uses sequence as a timestamp tie breaker and ignores thinking output', () => {
     const wrapper = mount(AgentProgressTimeline, { props: { tools: [tool({ agentId: 'master-2', sequence: 2 })], outputs: [{ id: 'thought', agentId: 'master-1', agentName: '主智能体', content: '先分析需求', timestamp, sequence: 1, status: 'completed' }] }, global: { stubs } })
-    expect(wrapper.findAll('.agent-step')).toHaveLength(2)
-    expect(wrapper.findAll('.agent-activity').map((node) => node.classes().includes('activity-thinking'))).toEqual([true, false])
+    expect(wrapper.findAll('.agent-step')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('先分析需求')
   })
 
-  it('toggles each agent independently, including the main agent', async () => {
-    const wrapper = mount(AgentProgressTimeline, { props: { tools: [
-      tool({ agentName: 'MasterAgent', tooldesc: '读取员工信息', toolCallId: 'main', agentId: 'master' }),
-      tool({ agentName: 'OrderManagementAgent', tooldesc: '规划行程', toolCallId: 'trip-1', agentId: 'child-1', timestamp: timestamp + 1 }),
-      tool({ agentName: 'GeneralInfoAgent', tooldesc: '查询差标', toolCallId: 'child-call-2', agentId: 'child-2', timestamp: timestamp + 2 }),
-    ] }, global: { stubs } })
+  it('toggles the whole timeline and auto-collapses when execution ends', async () => {
+    const wrapper = mount(AgentProgressTimeline, { props: { status: 'streaming', tools: [tool()] }, global: { stubs } })
+    const toggle = wrapper.get('.timeline-toggle')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.agent-timeline').exists()).toBe(true)
 
-    const buttons = wrapper.findAll('.agent-toggle')
-    expect(buttons).toHaveLength(3)
-    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['true', 'true', 'true'])
-    expect(wrapper.find('.agent-node').exists()).toBe(true)
-    const collapsedStates = () => wrapper.findAll('.agent-activities').map((list) => (list.attributes('style') ?? '').includes('display: none'))
-    expect(collapsedStates()).toEqual([false, false, false])
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.agent-timeline').exists()).toBe(false)
 
-    await buttons[0]!.trigger('click')
-    expect(buttons[0]!.attributes('aria-expanded')).toBe('false')
-    expect(buttons[0]!.attributes('aria-label')).toBe('展开主智能体执行过程')
-    expect(buttons[0]!.attributes('title')).toBe('展开主智能体执行过程')
-    expect(collapsedStates()).toEqual([true, false, false])
-
-    await buttons[1]!.trigger('click')
-    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['false', 'false', 'true'])
-    await buttons[0]!.trigger('click')
-    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['true', 'false', 'true'])
-  })
-
-  it('collapses all agent activity when the assistant finishes and keeps manual control', async () => {
-    const wrapper = mount(AgentProgressTimeline, { props: { status: 'streaming', tools: [
-      tool({ agentName: 'MasterAgent', toolCallId: 'main', agentId: 'master' }),
-      tool({ agentName: 'OrderManagementAgent', toolCallId: 'child', agentId: 'child', timestamp: timestamp + 1 }),
-    ] }, global: { stubs } })
-    const collapsedStates = () => wrapper.findAll('.agent-activities').map((list) => (list.attributes('style') ?? '').includes('display: none'))
-    expect(collapsedStates()).toEqual([false, false])
-
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
     await wrapper.setProps({ status: 'completed' })
-    expect(collapsedStates()).toEqual([true, true])
-    const buttons = wrapper.findAll('.agent-toggle')
-    expect(buttons.map((button) => button.attributes('aria-expanded'))).toEqual(['false', 'false'])
-    await buttons[0]!.trigger('click')
-    expect(collapsedStates()).toEqual([false, true])
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.agent-timeline').exists()).toBe(false)
+
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+  })
+
+  it('colors the execution marker red while running and green when complete', async () => {
+    const wrapper = mount(AgentProgressTimeline, { props: { status: 'streaming', tools: [tool({ status: 'running' })] }, global: { stubs } })
+    expect(wrapper.get('.timeline-marker').classes()).toContain('is-running')
+
+    await wrapper.setProps({ status: 'completed', tools: [tool({ status: 'completed' })] })
+    expect(wrapper.get('.timeline-marker').classes()).toContain('is-done')
+  })
+
+  it('stays expanded while waiting for user input', () => {
+    const wrapper = mount(AgentProgressTimeline, { props: { status: 'awaiting-input', tools: [tool({ status: 'suspended' })] }, global: { stubs } })
+    expect(wrapper.get('.timeline-toggle').attributes('aria-expanded')).toBe('true')
   })
 
   it('shows Chinese agent/tool labels, parameters, output, timestamps and duration', async () => {
     const wrapper = mount(AgentProgressTimeline, { props: { tools: [tool({ agentName: 'MasterAgent', tooldesc: null })] }, global: { stubs } })
-    expect(wrapper.text()).toContain('主智能体')
-    expect(wrapper.text()).toContain('获取用户信息')
-    expect(wrapper.text()).toContain('get_userinfo')
+    expect(wrapper.text()).toContain('主智能体-获取用户信息')
     expect(wrapper.text()).toContain('执行完成')
     expect(wrapper.text()).not.toContain('执行成功')
     expect(wrapper.text()).toContain('1.5 秒')
@@ -215,11 +207,82 @@ describe('agent timeline presentation', () => {
     expect(wrapper.get('.tool-output pre').text()).toBe(value === '' || value === null ? '无文本输出' : String(value))
   })
 
-  it('renders tool output as plain text and keeps the final assistant answer after the timeline', () => {
+  it('renders tool output as plain text and keeps the final assistant answer after the timeline', async () => {
     const wrapper = mount(ConversationMessage, { props: { message: { id: 1, conversationId: 25, role: 'assistant', content: '最终回复', status: 'completed', toolCalls: [tool({ result: '<script>alert(1)</script>' })] } }, global: { stubs } })
+    expect(wrapper.get('.timeline-toggle').attributes('aria-expanded')).toBe('false')
+    await wrapper.get('.timeline-toggle').trigger('click')
     expect(wrapper.get('.tool-output pre').text()).toBe('<script>alert(1)</script>')
     expect(wrapper.find('script').exists()).toBe(false)
-    expect(wrapper.get('.message-content').element.firstElementChild?.classList.contains('agent-progress')).toBe(true)
+    expect(wrapper.get('.assistant-progress').find('.agent-progress').exists()).toBe(true)
     expect(wrapper.get('.message-bubble').text()).toBe('最终回复')
+  })
+
+  it('connects the intent and execution markers when both timelines are present', () => {
+    const wrapper = mount(ConversationMessage, { props: { message: {
+      id: 1,
+      conversationId: 25,
+      role: 'assistant',
+      content: '',
+      status: 'streaming',
+      intentEvents: [{ version: 1, type: 'intent_start', sequence: 0, payload: { traceId: 'trace-1' } }],
+      toolCalls: [tool({ status: 'running', result: undefined })],
+    } }, global: { stubs } })
+    expect(wrapper.find('.progress-connector').exists()).toBe(true)
+    expect(wrapper.get('.intent-progress').classes()).toContain('has-tool-connector')
+    expect(wrapper.get('.intent-pulse').classes()).toContain('is-running')
+    expect(wrapper.get('.timeline-marker').classes()).toContain('is-running')
+  })
+})
+
+describe('intent recognition timeline presentation', () => {
+  it('merges stage updates and renders the recognition summary', () => {
+    const wrapper = mount(IntentProgressTimeline, { props: { events: [
+      { version: 1, type: 'intent_start', sequence: 0, payload: { traceId: 'trace-1' } },
+      { version: 1, type: 'intent_progress', sequence: 1, payload: { traceId: 'trace-1', stage: 'rule_matching', status: 'started', message: '开始规则匹配', pass: 'original' } },
+      { version: 1, type: 'intent_progress', sequence: 2, payload: { traceId: 'trace-1', stage: 'rule_matching', status: 'completed', message: '规则匹配完成', pass: 'original', level: 'L1' } },
+      { version: 1, type: 'intent_progress', sequence: 3, payload: { traceId: 'trace-1', stage: 'question_rewrite', status: 'completed', message: '问题改写完成', rewrittenQuestion: '帮我预订下周一从上海到北京的机票' } },
+      { version: 1, type: 'recognition_result', sequence: 4, payload: { traceId: 'trace-1', stage: 'recognition_result', status: 'completed', message: '意图识别完成', level: 'L1', intents: ['BOOK_TRAVEL'], isMultiIntent: false } },
+    ] }, global: { stubs } })
+    expect(wrapper.findAll('.intent-step')).toHaveLength(4)
+    expect(wrapper.text()).toContain('规则匹配')
+    expect(wrapper.text()).toContain('L1')
+    expect(wrapper.text()).toContain('BOOK_TRAVEL')
+    expect(wrapper.text()).toContain('单一意图')
+    expect(wrapper.text()).toContain('改写后问题')
+    expect(wrapper.text()).toContain('帮我预订下周一从上海到北京的机票')
+    expect(wrapper.text()).toContain('意图识别完成')
+    expect(wrapper.get('.intent-pulse').classes()).toContain('is-done')
+  })
+
+  it('marks ongoing intent recognition red and completed intent recognition green', () => {
+    const wrapper = mount(IntentProgressTimeline, { props: { events: [
+      { version: 1, type: 'intent_start', sequence: 0, payload: { traceId: 'trace-1' } },
+      { version: 1, type: 'intent_progress', sequence: 1, payload: { traceId: 'trace-1', stage: 'rule_matching', status: 'running', message: '正在匹配规则' } },
+    ] }, global: { stubs } })
+    expect(wrapper.get('.intent-pulse').classes()).not.toContain('is-done')
+
+    return wrapper.setProps({ events: [
+      { version: 1, type: 'intent_start', sequence: 0, payload: { traceId: 'trace-1' } },
+      { version: 1, type: 'recognition_result', sequence: 1, payload: { traceId: 'trace-1', stage: 'recognition_result', status: 'completed', message: '识别完成' } },
+    ] }).then(() => expect(wrapper.get('.intent-pulse').classes()).toContain('is-done'))
+  })
+
+  it('auto-collapses after intent_end and allows manual expansion', async () => {
+    const wrapper = mount(IntentProgressTimeline, { props: { events: [
+      { version: 1, type: 'intent_start', sequence: 0, payload: { traceId: 'trace-1' } },
+      { version: 1, type: 'intent_progress', sequence: 1, payload: { traceId: 'trace-1', stage: 'structure_analysis', status: 'completed', message: '结构分析完成' } },
+      { version: 1, type: 'intent_end', sequence: 2, payload: { traceId: 'trace-1' } },
+    ] }, global: { stubs } })
+
+    expect(wrapper.get('.intent-toggle').attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.intent-steps').exists()).toBe(false)
+
+    await wrapper.get('.intent-toggle').trigger('click')
+    expect(wrapper.get('.intent-toggle').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.intent-steps').exists()).toBe(true)
+
+    await wrapper.get('.intent-toggle').trigger('click')
+    expect(wrapper.get('.intent-toggle').attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.intent-steps').exists()).toBe(false)
   })
 })

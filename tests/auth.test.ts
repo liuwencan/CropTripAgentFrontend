@@ -10,6 +10,7 @@ describe('auth store', () => {
     await store.login({ username: 'admin', password: 'password' })
     expect(store.isAuthenticated).toBe(true)
     expect(store.isAdmin).toBe(true)
+    expect(store.user?.nickName).toBe('演示员工')
   })
   it('clears stale session when restoration has no token', async () => {
     localStorage.setItem('corp_trip_token', 'stale')

@@ -1,7 +1,7 @@
 import { computed, reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { conversationApi } from '@/api/conversationApi'
-import type { AgentOutput, AgentProgressMetadata, Conversation, ConversationMessage, StreamEvent, ToolCall } from '@/types/conversation'
+import type { AgentOutput, AgentProgressMetadata, Conversation, ConversationMessage, IntentEvent, StreamEvent, ToolCall } from '@/types/conversation'
 
 export const useConversationStore = defineStore('conversation', () => {
   const conversations = ref<Conversation[]>([])
@@ -63,6 +63,12 @@ export const useConversationStore = defineStore('conversation', () => {
     return current + incoming
   }
 
+  function appendIntentEvent(assistant: ConversationMessage, event: IntentEvent) {
+    assistant.intentEvents ??= []
+    const duplicate = assistant.intentEvents.some((item) => item.type === event.type && item.sequence === event.sequence)
+    if (!duplicate) assistant.intentEvents.push(event)
+  }
+
   async function loadConversations() {
     loading.value = true
     try {
@@ -112,6 +118,10 @@ export const useConversationStore = defineStore('conversation', () => {
         if (eventConversationId !== undefined && streamedConversationId === null) {
           streamedConversationId = eventConversationId
           adoptConversation(eventConversationId, content, userMessage, assistant)
+        }
+        if (event.type === 'intent_start' || event.type === 'intent_progress' || event.type === 'recognition_result' || event.type === 'intent_end') {
+          appendIntentEvent(assistant, event)
+          continue
         }
         // The ask frame may precede the terminal frame that carries a new conversation ID.
         if (awaitingInput) continue

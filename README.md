@@ -1,4 +1,4 @@
-# 企业差旅助手前端
+# 途灵企业差旅助手前端
 
 企业差旅助手的前端应用，面向企业员工和管理员提供差旅咨询、政策查询、行程规划及运营管理能力。
 
@@ -69,7 +69,7 @@ npm run dev
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | 普通 JSON API 的基础地址 | `http://localhost:8080` |
 | `VITE_STREAM_BASE_URL` | SSE 对话接口的基础地址 | `http://localhost:8080` |
-| `VITE_APP_TITLE` | 浏览器页面标题 | `企业差旅助手` |
+| `VITE_APP_TITLE` | 浏览器页面标题 | `途灵` |
 | `VITE_ENABLE_MOCK` | 是否启用本地 Mock 数据 | `true` 或 `false` |
 
 ### Mock 模式
@@ -98,7 +98,7 @@ npm run build
 window.__APP_CONFIG__ = {
   apiBaseUrl: 'https://api.example.com',
   streamBaseUrl: 'https://api.example.com',
-  appTitle: '企业差旅助手',
+  appTitle: '途灵',
   enableMock: false,
   features: {
     admin: true,

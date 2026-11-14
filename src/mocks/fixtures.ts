@@ -3,9 +3,10 @@ import type { LoginData } from '@/types/auth'
 
 export const mockUser: LoginData = {
   tokenName: 'token',
+  tokenPrefix: 'Bearer',
   tokenValue: 'mock-demo-token',
   expiresIn: 86400,
-  user: { id: 1, username: 'demo.admin', role: 'ADMIN', mustChangePassword: false },
+  user: { id: 1, username: 'demo.admin', role: 'ADMIN', nickName: '演示员工', mustChangePassword: false },
 }
 
 export const mockConversation: Conversation = { id: 1, title: '我的差旅规划', status: 'ACTIVE', messageCount: 2 }

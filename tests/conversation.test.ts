@@ -277,4 +277,27 @@ describe('conversation store', () => {
     await store.send('查询')
     expect(store.messages.at(-1)?.status).toBe('completed')
   })
+  it('attaches intent recognition events to the streamed assistant message', async () => {
+    vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (): AsyncGenerator<StreamEvent> {
+      yield { version: 1, type: 'intent_start', sequence: 0, payload: { traceId: 'trace-1' } }
+      yield { version: 1, type: 'intent_progress', sequence: 1, payload: { traceId: 'trace-1', stage: 'rule_matching', status: 'started', message: '开始规则匹配', pass: 'original' } }
+      yield { version: 1, type: 'intent_progress', sequence: 2, payload: { traceId: 'trace-1', stage: 'rule_matching', status: 'completed', message: '规则匹配完成', pass: 'original', level: 'L1' } }
+      yield { version: 1, type: 'recognition_result', sequence: 3, payload: { traceId: 'trace-1', stage: 'recognition_result', status: 'completed', message: '意图识别完成', level: 'L1', intents: ['BOOK_TRAVEL'], isMultiIntent: false } }
+      yield { version: 1, type: 'intent_end', sequence: 4, payload: { traceId: 'trace-1' } }
+      yield { version: 1, type: 'message.delta', sequence: 5, payload: { content: '已识别' } }
+      yield { version: 1, type: 'done', sequence: 6 }
+    })
+    const store = useConversationStore()
+    await store.send('帮我预订机票')
+    expect(store.messages.at(-1)).toMatchObject({
+      status: 'completed',
+      intentEvents: [
+        { type: 'intent_start', payload: { traceId: 'trace-1' } },
+        { type: 'intent_progress', payload: { stage: 'rule_matching', status: 'started' } },
+        { type: 'intent_progress', payload: { stage: 'rule_matching', status: 'completed' } },
+        { type: 'recognition_result', payload: { level: 'L1', intents: ['BOOK_TRAVEL'], isMultiIntent: false } },
+        { type: 'intent_end', payload: { traceId: 'trace-1' } },
+      ],
+    })
+  })
 })

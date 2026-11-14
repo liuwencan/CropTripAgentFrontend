@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Calendar, Location, Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import AdminPageShell from '@/views/admin/AdminPageShell.vue'
+import PageShell from '@/components/PageShell.vue'
 import { tripApi } from '@/api/tripApi'
 import type { PageResponse } from '@/types/api'
 import type { TripApprovalRecord, TripOrder, TripOrderStatus } from '@/types/trip'
@@ -40,7 +40,7 @@ onMounted(load)
 </script>
 
 <template>
-  <AdminPageShell title="我的行程" description="查看本人提交的出差申请及审批进度。">
+  <PageShell title="我的行程" description="查看本人提交的出差申请及审批进度。">
     <el-card class="trip-data-card">
       <div class="trip-overview"><div><strong>{{ result.totalCount }}</strong><span>份出差申请</span></div><span>状态以审批记录为准</span></div>
       <form class="trip-toolbar" @submit.prevent="search">
@@ -79,7 +79,7 @@ onMounted(load)
         </el-descriptions>
       </template>
     </el-drawer>
-  </AdminPageShell>
+  </PageShell>
 </template>
 
 <style scoped>

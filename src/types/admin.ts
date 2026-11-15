@@ -57,3 +57,59 @@ export interface PromptVersionCompare {
   rightPromptContent?: string
   contentChanged?: boolean
 }
+
+export type AgentTraceSpanType = 'AGENT' | 'MODEL' | 'TOOL' | 'SUMMARY' | string
+export type AgentTraceStatus = 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SUSPENDED' | string
+
+export interface AgentTraceSpan {
+  id: number
+  traceId: string
+  spanId: string
+  parentSpanId?: string | null
+  sessionId?: number | null
+  userId?: number | null
+  agentId?: string | null
+  agentName?: string | null
+  spanType: AgentTraceSpanType
+  operationName?: string | null
+  status: AgentTraceStatus
+  iteration?: number | null
+  modelName?: string | null
+  toolName?: string | null
+  toolCallId?: string | null
+  inputMessageCount?: number | null
+  inputChars?: number | null
+  outputChars?: number | null
+  inputMessages?: unknown
+  outputMessage?: unknown
+  toolResult?: unknown
+  inputTokens?: number | null
+  outputTokens?: number | null
+  startTime: string
+  endTime?: string | null
+  durationMs?: number | null
+  errorSummary?: string | null
+  attributes?: Record<string, unknown> | null
+  createTime?: string
+  updateTime?: string
+}
+
+export interface AgentTraceDetail {
+  traceId: string
+  totalDurationMs?: number | null
+  totalInputTokens?: number | null
+  totalOutputTokens?: number | null
+  spans: AgentTraceSpan[]
+}
+
+export interface AgentTraceQuery {
+  pageNo: number
+  pageSize: number
+  traceId?: string
+  sessionId?: string
+  userId?: string
+  spanType?: AgentTraceSpanType | ''
+  status?: AgentTraceStatus | ''
+  startFrom?: string
+  startTo?: string
+}

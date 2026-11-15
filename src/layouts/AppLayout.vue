@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Calendar, ChatLineRound, Close, Document, Expand, Fold, Plus, Search, Setting, Star, SwitchButton, User, Tickets } from '@element-plus/icons-vue'
+import { ArrowDown, Calendar, ChatLineRound, Close, Document, Expand, Fold, Plus, Search, Setting, Star, SwitchButton, User, Tickets, Connection } from '@element-plus/icons-vue'
 import TravelBrand from '@/components/TravelBrand.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import { useAuthStore } from '@/store/auth'
@@ -23,17 +23,19 @@ const sidebar = ref<HTMLElement>()
 let previousFocus: HTMLElement | null = null
 const isAdmin = computed(() => auth.isAdmin && appConfig.features.admin)
 const displayName = computed(() => auth.user?.nickName?.trim() || auth.user?.username || '用户')
-const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/trips': '我的行程', '/preferences': '偏好设置' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
+const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/admin/traces': '智能体调用链路', '/trips': '我的行程', '/preferences': '偏好设置' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
 const adminLinks = [
   { path: '/admin/users', label: '用户管理', icon: User },
   { path: '/admin/config', label: '系统配置', icon: Setting },
   { path: '/admin/prompts', label: 'Prompt 管理', icon: Document },
+  { path: '/admin/traces', label: '智能体调用链路', icon: Connection },
 ]
 const tripLinks = computed(() => [
   ...(isAdmin.value ? [{ path: '/admin/trips', label: '行程管理', icon: Tickets }] : []),
   { path: '/trips', label: '我的行程', icon: Calendar },
   { path: '/preferences', label: '偏好设置', icon: Star },
 ])
+const accountLinks = computed(() => [...tripLinks.value, ...(isAdmin.value ? adminLinks : [])])
 const groups = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const week = today.getTime() - 6 * 86400000
@@ -125,17 +127,12 @@ async function signOut() {
         </template>
       </div>
       <div class="sidebar-bottom">
-        <el-dropdown trigger="click" placement="top-start" class="account-dropdown"><button class="account-button" :aria-label="`${displayName}，账号菜单`"><UserAvatar class="account-avatar" :src="auth.user?.avatar" :name="displayName" :size="34" /><span class="account-details sidebar-label"><strong>{{ displayName }}</strong><small>{{ auth.isAdmin ? '管理员' : '企业员工' }}</small></span><el-icon class="sidebar-label"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item @click="signOut"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+        <el-dropdown trigger="click" placement="top-start" class="account-dropdown"><button class="account-button" :aria-label="`${displayName}，账号菜单`"><UserAvatar class="account-avatar" :src="auth.user?.avatar" :name="displayName" :size="34" /><span class="account-details sidebar-label"><strong>{{ displayName }}</strong><small>{{ auth.isAdmin ? '管理员' : '企业员工' }}</small></span><el-icon class="sidebar-label"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="link in accountLinks" :key="link.path" @click="router.push(link.path)"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</el-dropdown-item><el-dropdown-item divided @click="signOut"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
       </div>
     </aside>
     <div class="app-body" :inert="mobileOpen">
       <header class="app-header">
         <div class="header-context"><button class="icon-button mobile-toggle" aria-label="打开会话侧栏" aria-controls="conversation-sidebar" :aria-expanded="mobileOpen" @click="mobileOpen = !mobileOpen"><el-icon><Expand /></el-icon></button><RouterLink v-if="route.path.startsWith('/admin')" class="workspace-return" to="/workspace">途灵</RouterLink><span v-if="route.path.startsWith('/admin')" class="context-divider">/</span><span class="current-page-title">{{ pageTitle }}</span></div>
-        <div class="header-nav-group">
-          <nav class="trip-nav" aria-label="行程入口"><RouterLink v-for="link in tripLinks" :key="link.path" :to="link.path" class="admin-nav-link"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</RouterLink></nav>
-          <nav v-if="isAdmin" class="admin-nav" aria-label="管理员菜单"><RouterLink v-for="link in adminLinks" :key="link.path" :to="link.path" class="admin-nav-link"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</RouterLink></nav>
-          <el-dropdown trigger="click" class="admin-mobile"><button class="admin-menu-button">行程<el-icon><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="link in tripLinks" :key="link.path" @click="router.push(link.path)">{{ link.label }}</el-dropdown-item><template v-if="isAdmin"><el-dropdown-item v-for="link in adminLinks" :key="link.path" @click="router.push(link.path)">{{ link.label }}</el-dropdown-item></template></el-dropdown-menu></template></el-dropdown>
-        </div>
       </header>
       <main id="main-content" class="app-main" :class="{ 'workspace-main': route.name === 'workspace' }"><RouterView /></main>
     </div>
@@ -180,30 +177,21 @@ async function signOut() {
 .account-details small { color: var(--text-muted); font-size: 11px; }
 .app-body { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
 .app-header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 20px; height: 68px; padding: 0 32px; }
-.header-nav-group { display: flex; align-items: center; gap: 16px; margin-left: auto; }
-.trip-nav { display: flex; gap: 7px; flex-shrink: 0; padding-right: 12px; border-right: 1px solid var(--line); }
 .header-context { display: flex; align-items: center; gap: 14px; min-width: 0; color: var(--text); font-size: 14px; }
 .current-page-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-return { flex-shrink: 0; color: var(--text-muted); text-decoration: none; }
 .workspace-return:hover { color: var(--accent); }
 .context-divider { color: #c3cad4; }
-.admin-nav { display: flex; gap: 7px; flex-shrink: 0; }
-.admin-nav-link { display: flex; align-items: center; gap: 7px; padding: 9px 11px; border-radius: 6px; color: #697386; text-decoration: none; font-size: 12px; }
-.admin-nav-link .el-icon { font-size: 15px; }
-.admin-nav-link:hover { background: var(--sidebar); color: var(--text); }
-.admin-nav-link.router-link-active { background: var(--accent-soft); color: var(--accent); }
 .app-main { min-height: 0; flex: 1; overflow: auto; }
 .app-main.workspace-main { display: flex; flex-direction: column; overflow: hidden; }
 .workspace-main > :deep(.workspace) { flex: 1; min-height: 0; }
-.admin-mobile, .mobile-toggle, .mobile-close, .sidebar-backdrop { display: none; }
-.admin-menu-button { display: flex; align-items: center; gap: 8px; padding: 8px; border: 0; background: transparent; color: var(--text-muted); white-space: nowrap; cursor: pointer; font-size: 12px; }
+.mobile-toggle, .mobile-close, .sidebar-backdrop { display: none; }
 .sidebar-collapsed .sidebar-label, .history-hidden, .sidebar-collapsed .search-button { display: none; }
 .sidebar-collapsed .sidebar-brand-row { flex-direction: column; justify-content: center; height: 104px; gap: 4px; }
 .sidebar-collapsed .sidebar-actions { justify-content: center; }
 .sidebar-collapsed .new-chat-button { padding: 0; justify-content: center; }
 .sidebar-collapsed .account-button { padding: 7px; justify-content: center; }
-@media (max-width: 1050px) { .app-header { padding: 0 22px; }.admin-nav-link { padding: 9px 7px; }.admin-nav { gap: 2px; }.header-nav-group { gap: 10px; } }
-@media (max-width: 900px) { .admin-nav { display: none; }.admin-mobile { display: inline-flex; }.trip-nav { display: none; } }
+@media (max-width: 1050px) { .app-header { padding: 0 22px; } }
 @media (max-width: 720px) {
   .app-shell, .app-shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
   .app-sidebar { display: none; }

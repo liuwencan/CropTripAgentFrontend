@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { MarkdownRenderer } from 'x-markdown-vue'
 import MarkdownContent from '@/components/MarkdownContent.vue'
 
 describe('MarkdownContent', () => {
@@ -23,5 +24,18 @@ describe('MarkdownContent', () => {
     expect(wrapper.find('.markdown-body.x-md-renderer').exists()).toBe(true)
     await wrapper.setProps({ source: '## 完整内容' })
     expect(wrapper.find('h2').text()).toBe('完整内容')
+  })
+
+  it('rebuilds a table when streamed markdown completes its table syntax', async () => {
+    const wrapper = mount(MarkdownContent, { props: { source: '| From | To |\n| --- |', isStreaming: true } })
+
+    await wrapper.setProps({ source: '| From | To |\n| --- | --- |\n| Shanghai | Beijing |' })
+    const streamingRenderer = wrapper.findComponent(MarkdownRenderer).vm.$.uid
+    await wrapper.setProps({ isStreaming: false })
+
+    expect(wrapper.findComponent(MarkdownRenderer).vm.$.uid).not.toBe(streamingRenderer)
+    expect(wrapper.find('table').exists()).toBe(true)
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
+    expect(wrapper.findAll('tbody td').map((cell) => cell.text())).toEqual(['Shanghai', 'Beijing'])
   })
 })

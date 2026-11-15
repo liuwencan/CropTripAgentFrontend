@@ -16,6 +16,7 @@ export const router = createRouter({
       { path: 'admin/users', name: 'admin-users', component: () => import('@/views/admin/UserManagementView.vue'), meta: { admin: true } },
       { path: 'admin/config', name: 'admin-config', component: () => import('@/views/admin/ConfigManagementView.vue'), meta: { admin: true } },
       { path: 'admin/prompts', name: 'admin-prompts', component: () => import('@/views/admin/PromptManagementView.vue'), meta: { admin: true } },
+      { path: 'admin/traces', name: 'admin-traces', component: () => import('@/views/admin/TraceManagementView.vue'), meta: { admin: true } },
     ] },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },
   ],

@@ -33,7 +33,7 @@ async function copy() {
         <AgentProgressTimeline :tools="message.toolCalls" :status="message.status" />
       </div>
       <AgentPlanList v-if="!isUser && message.plans?.length" :plans="message.plans" />
-      <div class="message-bubble"><MarkdownContent v-if="!isUser && message.content" :source="message.content" /><p v-else-if="isUser">{{ message.content }}</p><p v-else-if="message.status === 'streaming' && !message.intentEvents?.length && !message.toolCalls?.length && !message.agentOutputs?.length && !message.plans?.length" class="stream-placeholder">正在整理你的需求…</p></div>
+      <div class="message-bubble"><MarkdownContent v-if="!isUser && message.content" :source="message.content" :is-streaming="message.status === 'streaming'" /><p v-else-if="isUser">{{ message.content }}</p><p v-else-if="message.status === 'streaming' && !message.intentEvents?.length && !message.toolCalls?.length && !message.agentOutputs?.length && !message.plans?.length" class="stream-placeholder">正在整理你的需求…</p></div>
       <AskUserPrompt v-if="!isUser && message.ask" :prompt="message.ask" :submitted="message.askStatus === 'submitted'" @submit="(value, display) => emit('askSubmit', message, value, display)" />
       <div v-if="message.status === 'failed'" class="message-error" role="alert"><span>{{ message.error || '响应失败，请重试' }}</span><el-button link type="primary" :icon="Refresh" @click="emit('retry', message)">重新生成</el-button></div>
       <div v-else-if="message.status === 'cancelled'" class="message-error"><span>已停止生成</span><el-button link type="primary" @click="emit('retry', message)">重新生成</el-button></div>

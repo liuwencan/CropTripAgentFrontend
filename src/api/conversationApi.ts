@@ -1,5 +1,6 @@
 import { appConfig } from '@/config'
 import { buildUrl, getAuthorizationHeader, request, requestData } from './http'
+import { getRequestBase } from '@/utils/requestRouting'
 import { readSseStream } from '@/utils/sse'
 import { createIdempotencyKey } from '@/utils/id'
 import type { AskUserPrompt, Conversation, ConversationMessage, StreamEvent } from '@/types/conversation'
@@ -78,6 +79,10 @@ export const conversationApi = {
     const page = await request<PageResponse<ConversationMessage>>(`/agent/conversations/${conversationId}/messages?pageNo=1&pageSize=100`)
     return page.data.map(normalizeMessageRole)
   },
+  async interrupt(conversationId: number): Promise<void> {
+    if (appConfig.enableMock) return
+    await requestData<void>('/chat/interrupt', { method: 'POST', body: JSON.stringify({ conversationId }) }, appConfig.streamBaseUrl)
+  },
   async *stream(conversationId: number | null, content: string, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
     if (appConfig.enableMock) {
       const resolvedConversationId = conversationId ?? ++mockConversationId
@@ -122,7 +127,7 @@ export const conversationApi = {
     const abort = () => controller.abort()
     signal?.addEventListener('abort', abort, { once: true })
     try {
-      const response = await fetch(buildUrl('/chat/chat', appConfig.streamBaseUrl), {
+      const response = await fetch(buildUrl('/chat/chat', getRequestBase(appConfig.streamBaseUrl)), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -163,7 +168,7 @@ export const conversationApi = {
     const abort = () => controller.abort()
     signal?.addEventListener('abort', abort, { once: true })
     try {
-      const response = await fetch(buildUrl('/chat/resume', appConfig.streamBaseUrl), {
+      const response = await fetch(buildUrl('/chat/resume', getRequestBase(appConfig.streamBaseUrl)), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -67,11 +67,16 @@ async function submitAsk(message: ConversationMessageData, _value: unknown, disp
   }
 }
 function starter(text: string) { composer.value?.setDraft(text) }
+async function pauseGeneration() {
+  try { await conversations.stop() } catch {
+    ElMessage.error('暂停请求失败，后台任务可能仍在运行；请检查网络后重试')
+  }
+}
 </script>
 
 <template>
   <div class="workspace" :class="{ 'is-empty': !hasMessages }">
-    <section ref="scroller" class="message-scroll" aria-label="差旅对话" :aria-busy="conversations.sending" @scroll.passive="trackScroll">
+    <section ref="scroller" class="message-scroll" aria-label="差旅对话" :aria-busy="conversations.busy" @scroll.passive="trackScroll">
       <div v-if="!hasMessages" class="welcome">
         <div class="welcome-brand"><TravelBrand mark-only /><span>途灵</span></div>
         <h1>这次出差，有什么可以帮你？</h1>
@@ -80,7 +85,7 @@ function starter(text: string) { composer.value?.setDraft(text) }
       <div v-else class="message-thread"><ConversationMessage v-for="message in conversations.messages" :key="message.id" :message="message" :user="auth.user" @retry="conversations.retry" @ask-submit="submitAsk" /><TravelWorkflowBlock v-for="block in workflowBlocks" :key="block.workflowId" :block="block" @confirm="workflow.confirm" @cancel="workflow.cancel" /></div>
     </section>
     <div class="composer-dock">
-      <MessageComposer ref="composer" :key="conversations.activeId ?? 'new'" :sending="conversations.sending" @send="send" @stop="conversations.stop" />
+      <MessageComposer ref="composer" :key="conversations.activeId ?? 'new'" :sending="conversations.sending" :interrupting="conversations.interrupting" @send="send" @stop="pauseGeneration" />
       <div v-if="!hasMessages" class="starter-list" aria-label="常用差旅需求"><button v-for="item in starters" :key="item.label" @click="starter(item.text)"><el-icon><component :is="item.icon" /></el-icon>{{ item.label }}</button></div>
     </div>
     <footer v-if="!hasMessages" class="workspace-footer"></footer>

@@ -21,6 +21,18 @@ describe('conversation store', () => {
     expect(events[0]).toMatchObject({ type: 'message.delta', payload: { content: 'continued' } })
     appConfig.enableMock = true
   })
+  it('posts the conversation id to the chat interrupt endpoint', async () => {
+    appConfig.enableMock = false
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, data: null }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await conversationApi.interrupt(12)
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/chat/interrupt')
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ conversationId: 12 })
+    appConfig.enableMock = true
+  })
   it('starts a new chat stream without calling the conversation creation endpoint', async () => {
     appConfig.enableMock = false
     const fetchMock = vi.fn().mockResolvedValue(new Response('event: complete\ndata: {"conversationId":88}\n\n', { status: 200 }))
@@ -166,10 +178,44 @@ describe('conversation store', () => {
     await vi.waitFor(() => expect(updates).toContain('正在查询差标'))
     expect(store.sending).toBe(true)
     expect(store.messages.at(-1)?.status).toBe('streaming')
-    store.stop(); resume(); await pending
+    await store.stop(); resume(); await pending
     expect(store.messages.at(-1)?.status).toBe('cancelled')
     expect(store.sending).toBe(false)
     stopWatch()
+  })
+  it('renders the backend interrupt delta and keeps the SSE open until it ends', async () => {
+    appConfig.enableMock = false
+    let releaseInterrupt!: () => void
+    const interruptGate = new Promise<void>((resolve) => { releaseInterrupt = resolve })
+    vi.spyOn(conversationApi, 'interrupt').mockReturnValue(interruptGate)
+    vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (_id, _content, signal): AsyncGenerator<StreamEvent> {
+      yield { version: 1, type: 'message.delta', sequence: 0, payload: { content: '正在处理' } }
+      await interruptGate
+      if (signal?.aborted) return
+      yield { version: 1, type: 'message.delta', sequence: 1, payload: { content: '已经成功中断Agent执行，还有什么可以帮助到您的吗？' } }
+      yield { version: 1, type: 'done', sequence: 2 }
+    })
+    const store = useConversationStore()
+    store.activeId = 12
+    const pending = store.send('查询差旅政策')
+    await vi.waitFor(() => expect(store.sending).toBe(true))
+    await vi.waitFor(() => expect(store.messages.at(-1)?.content).toBe('正在处理'))
+
+    const interrupt = store.stop()
+    expect(conversationApi.interrupt).toHaveBeenCalledWith(12)
+    expect(store.busy).toBe(true)
+    await store.send('开始新的问题')
+    expect(store.messages.filter((message) => message.role === 'user')).toHaveLength(1)
+    expect(store.messages.at(-1)?.content).toBe('正在处理')
+
+    releaseInterrupt()
+    await interrupt
+    await pending
+    expect(store.messages.at(-1)).toMatchObject({
+      status: 'cancelled',
+      content: '正在处理已经成功中断Agent执行，还有什么可以帮助到您的吗？',
+    })
+    appConfig.enableMock = true
   })
   it('does not duplicate cumulative SSE content frames', async () => {
     vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (): AsyncGenerator<StreamEvent> {

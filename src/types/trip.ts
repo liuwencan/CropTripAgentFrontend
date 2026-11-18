@@ -26,3 +26,30 @@ export interface TripApprovalRecord {
   updateTime?: string
   orderId?: string
 }
+
+export type BookingType = 'FLIGHT' | 'HOTEL' | 'TRAIN' | 'TICKET' | 'CRUISE' | 'VACATION'
+
+export interface BookingRecord {
+  id: number
+  bookingId: string
+  conversationId?: string
+  travelOrderId?: string
+  bizType: BookingType
+  platform?: string
+  externalOrderNo?: string
+  status: string
+  externalStatus?: string
+  paymentStatus?: string
+  title?: string
+  totalAmount?: number
+  currency?: string
+  contactName?: string
+  contactPhone?: string
+  startTime?: string
+  endTime?: string
+  detail?: string
+  remark?: string
+  bookedAt?: string
+  createdAt?: string
+  updatedAt?: string
+}

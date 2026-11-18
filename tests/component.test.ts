@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MessageComposer from '@/components/MessageComposer.vue'
+import ConversationMessage from '@/components/ConversationMessage.vue'
 import AskUserPrompt from '@/components/AskUserPrompt.vue'
 import TravelWorkflowBlock from '@/components/TravelWorkflowBlock.vue'
 
@@ -11,6 +12,8 @@ describe('shared interaction components', () => {
     await wrapper.find('textarea').trigger('keydown', { key: 'Enter' })
     expect(wrapper.emitted('send')?.[0]).toEqual(['查询差旅政策'])
     await wrapper.setProps({ sending: true })
+    expect(wrapper.find('button').attributes('aria-label')).toBe('暂停生成')
+    expect(wrapper.find('button').text()).toBe('暂停生成')
     await wrapper.find('button').trigger('click')
     expect(wrapper.emitted('stop')).toBeTruthy()
   })
@@ -35,6 +38,33 @@ describe('shared interaction components', () => {
     expect(wrapper.emitted('send')).toBeUndefined()
     await textarea.trigger('keydown', { key: 'Enter' })
     expect(wrapper.emitted('send')?.[0]).toEqual(['北京出差'])
+  })
+  it('keeps the draft while the backend interrupt request is pending', async () => {
+    const wrapper = mount(MessageComposer, { props: { sending: false, interrupting: true }, global: { stubs: { 'el-button': { template: '<button><slot /></button>' } } } })
+    const textarea = wrapper.find('textarea')
+    await textarea.setValue('查询上海差旅标准')
+    await textarea.trigger('keydown', { key: 'Enter' })
+
+    expect(wrapper.emitted('send')).toBeUndefined()
+    expect(textarea.element.value).toBe('查询上海差旅标准')
+  })
+  it('renders the backend interrupt response as assistant content', () => {
+    const response = '已经成功中断Agent执行，还有什么可以帮助到您的吗？'
+    const wrapper = mount(ConversationMessage, {
+      props: { message: { id: 2, conversationId: 12, role: 'assistant', content: response, status: 'cancelled' } },
+      global: {
+        stubs: {
+          TravelBrand: true,
+          UserAvatar: true,
+          'el-icon': true,
+          MarkdownContent: { props: ['source'], template: '<div class="markdown-body">{{ source }}</div>' },
+          'el-button': { template: '<button><slot /></button>' },
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain(response)
+    expect(wrapper.text()).not.toContain('已暂停生成')
   })
   it('renders selectable clarification options and emits a readable answer', async () => {
     const wrapper = mount(AskUserPrompt, { props: { prompt: { question: '选择出发城市', ui_type: 'select', options: ['北京', '上海'] } }, global: { stubs: { 'el-icon': true } } })

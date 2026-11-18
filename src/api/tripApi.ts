@@ -1,6 +1,6 @@
 import { request, requestData } from './http'
 import type { PageResponse } from '@/types/api'
-import type { TripApprovalRecord, TripOrder, TripOrderStatus } from '@/types/trip'
+import type { BookingRecord, TripApprovalRecord, TripOrder, TripOrderStatus } from '@/types/trip'
 
 export interface TripOrderQuery {
   pageNo: number
@@ -10,6 +10,14 @@ export interface TripOrderQuery {
   departureCity?: string
   departureDate?: string
   returnDate?: string
+}
+
+export interface BookingRecordQuery {
+  pageNo: number
+  pageSize: number
+  travelOrderId?: string
+  bizType?: string
+  status?: string
 }
 
 function queryString(query: object) {
@@ -23,6 +31,12 @@ function queryString(query: object) {
 export const tripApi = {
   orders(query: TripOrderQuery) {
     return request<PageResponse<TripOrder>>(`/trip/orders?${queryString(query)}`)
+  },
+  cancelOrder(id: string) {
+    return requestData<TripOrder>(`/trip/orders/${encodeURIComponent(id)}/cancel`, { method: 'POST' })
+  },
+  bookingRecords(query: BookingRecordQuery) {
+    return request<PageResponse<BookingRecord>>(`/business/booking-records?${queryString(query)}`)
   },
   approvalRecords(query: { pageNo: number; pageSize: number; status?: string; orderId?: string }) {
     return request<PageResponse<TripApprovalRecord>>(`/trip/approval-records?${queryString(query)}`)

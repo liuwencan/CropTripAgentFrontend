@@ -2,7 +2,7 @@
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { Top, VideoPause } from '@element-plus/icons-vue'
 
-const props = defineProps<{ sending: boolean }>()
+const props = defineProps<{ sending: boolean; interrupting?: boolean }>()
 const emit = defineEmits<{ send: [value: string]; stop: [] }>()
 const value = ref('')
 const input = ref<HTMLTextAreaElement>()
@@ -16,7 +16,7 @@ watch(value, resize, { flush: 'post' })
 onMounted(resize)
 
 function submit() {
-  if (props.sending || !value.value.trim()) return
+  if (props.sending || props.interrupting || !value.value.trim()) return
   emit('send', value.value.trim())
   value.value = ''
 }
@@ -29,9 +29,9 @@ defineExpose({ setDraft })
 </script>
 
 <template>
-  <div class="composer" :class="{ 'is-sending': sending }">
+  <div class="composer" :class="{ 'is-sending': sending || interrupting }">
     <textarea ref="input" v-model="value" rows="2" maxlength="20000" aria-label="差旅需求" placeholder="告诉我你的出发地、目的地和出行日期…" @keydown="keydown" />
-    <div class="composer-actions"><span class="composer-context"><span class="context-dot" />企业差旅咨询</span><span class="composer-keyboard">Enter 发送，Shift + Enter 换行</span><el-button v-if="sending" class="stop-button" :icon="VideoPause" aria-label="停止生成" @click="emit('stop')">停止生成</el-button><el-button v-else class="send-button" type="primary" :icon="Top" :disabled="!value.trim()" aria-label="发送消息" title="发送消息" @click="submit" /></div>
+    <div class="composer-actions"><span class="composer-context"><span class="context-dot" />企业差旅咨询</span><span class="composer-keyboard">Enter 发送，Shift + Enter 换行</span><el-button v-if="sending || interrupting" class="stop-button" :icon="VideoPause" :loading="interrupting" :disabled="interrupting" aria-label="暂停生成" @click="emit('stop')">{{ interrupting ? '正在暂停…' : '暂停生成' }}</el-button><el-button v-else class="send-button" type="primary" :icon="Top" :disabled="!value.trim()" aria-label="发送消息" title="发送消息" @click="submit" /></div>
   </div>
 </template>
 

@@ -1,5 +1,6 @@
 import { appConfig } from '@/config'
 import { ApiError } from '@/utils/errors'
+import { getRequestBase } from '@/utils/requestRouting'
 
 const TOKEN_KEY = 'corp_trip_token'
 const TOKEN_NAME_KEY = 'corp_trip_token_name'
@@ -36,7 +37,7 @@ export async function request<T>(path: string, init: RequestInit = {}, base?: st
   if (authorization) headers.set(AUTHORIZATION_HEADER, authorization)
   let response: Response
   try {
-    response = await fetch(buildUrl(path, base), { ...init, headers })
+    response = await fetch(buildUrl(path, getRequestBase(base ?? appConfig.apiBaseUrl)), { ...init, headers })
   } catch (error) {
     throw new ApiError({ message: error instanceof Error ? error.message : '网络连接失败' })
   }

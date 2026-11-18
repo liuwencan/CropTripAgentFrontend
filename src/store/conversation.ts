@@ -1,6 +1,7 @@
 import { computed, reactive, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { conversationApi } from '@/api/conversationApi'
+import { appConfig } from '@/config'
 import type { AgentOutput, AgentProgressMetadata, Conversation, ConversationMessage, IntentEvent, StreamEvent, ToolCall } from '@/types/conversation'
 
 export const useConversationStore = defineStore('conversation', () => {
@@ -9,6 +10,9 @@ export const useConversationStore = defineStore('conversation', () => {
   const messages = ref<ConversationMessage[]>([])
   const loading = ref(false)
   const sending = ref(false)
+  const interrupting = ref(false)
+  const interruptRequestPending = ref(false)
+  const busy = computed(() => sending.value || interrupting.value)
   const abortController = ref<AbortController | null>(null)
   const workflowEvents = ref<StreamEvent[]>([])
   const activeConversation = computed(() => conversations.value.find((item) => item.id === activeId.value) ?? null)
@@ -197,19 +201,26 @@ export const useConversationStore = defineStore('conversation', () => {
           assistant.status = 'failed'
           assistant.error = event.payload.message
         } else if (event.type === 'message.done' || event.type === 'done') {
-          if (assistant.status !== 'failed' && (eventConversationId === undefined || eventConversationId === streamedConversationId)) assistant.status = 'completed'
+          if (assistant.status !== 'failed' && (eventConversationId === undefined || eventConversationId === streamedConversationId)) {
+            assistant.status = interrupting.value ? 'cancelled' : 'completed'
+          }
         }
       }
-      if (assistant.status === 'streaming') assistant.status = abortController.value?.signal.aborted ? 'cancelled' : 'completed'
+      if (assistant.status === 'streaming') assistant.status = abortController.value?.signal.aborted || interrupting.value ? 'cancelled' : 'completed'
     } catch (error) {
       if (awaitingInput) assistant.status = 'awaiting-input'
-      else if (abortController.value?.signal.aborted) assistant.status = 'cancelled'
+      else if (abortController.value?.signal.aborted || interrupting.value) assistant.status = 'cancelled'
       else { assistant.status = 'failed'; assistant.error = error instanceof Error ? error.message : '流式响应失败' }
-    } finally { settleAgentProgress(assistant); sending.value = false; abortController.value = null }
+    } finally {
+      settleAgentProgress(assistant)
+      sending.value = false
+      abortController.value = null
+      if (!interruptRequestPending.value) interrupting.value = false
+    }
   }
 
   async function send(content: string) {
-    if (!content.trim() || sending.value) return
+    if (!content.trim() || busy.value) return
     sending.value = true
     try {
       let conversationId = activeId.value
@@ -228,10 +239,31 @@ export const useConversationStore = defineStore('conversation', () => {
     } finally { sending.value = false }
   }
 
-  function stop() { abortController.value?.abort() }
+  async function stop() {
+    const controller = abortController.value
+    if (!controller || controller.signal.aborted || interrupting.value) return
+
+    const conversationId = activeId.value
+    if (appConfig.enableMock || !conversationId) {
+      controller.abort()
+      return
+    }
+
+    interrupting.value = true
+    interruptRequestPending.value = true
+    try {
+      await conversationApi.interrupt(conversationId)
+    } catch (error) {
+      controller.abort()
+      throw error
+    } finally {
+      interruptRequestPending.value = false
+      if (!sending.value) interrupting.value = false
+    }
+  }
 
   async function answerAsk(message: ConversationMessage, answer: string) {
-    if (sending.value || message.askStatus !== 'pending' || message.status !== 'awaiting-input') return
+    if (busy.value || message.askStatus !== 'pending' || message.status !== 'awaiting-input') return
     if (!message.askToolCallId) throw new Error('缺少工具调用标识，无法恢复会话，请重新发起问题')
     const conversationId = message.conversationId > 0 ? message.conversationId : activeId.value
     if (conversationId === null || !Number.isFinite(conversationId) || conversationId <= 0) {
@@ -252,7 +284,7 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   async function retry(message: ConversationMessage) {
-    if (sending.value) return
+    if (busy.value) return
     const index = messages.value.findIndex((item) => item.id === message.id)
     const userMessage = index > 0 ? messages.value[index - 1] : undefined
     if (userMessage?.role === 'user') {
@@ -264,5 +296,5 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  return { conversations, activeId, activeConversation, messages, workflowEvents, loading, sending, loadConversations, selectConversation, createConversation, send, stop, answerAsk, retry }
+  return { conversations, activeId, activeConversation, messages, workflowEvents, loading, sending, interrupting, busy, loadConversations, selectConversation, createConversation, send, stop, answerAsk, retry }
 })

@@ -3,6 +3,7 @@ import { authApi } from '@/api/authApi'
 import { configApi } from '@/api/configApi'
 import { promptApi } from '@/api/promptApi'
 import { userApi } from '@/api/userApi'
+import { tripApi } from '@/api/tripApi'
 import { appConfig } from '@/config'
 
 describe('API contracts', () => {
@@ -55,5 +56,14 @@ describe('API contracts', () => {
     await promptApi.releaseLogs(3)
     const urls = fetchMock.mock.calls.map((call) => String(call[0]))
     expect(urls).toEqual(expect.arrayContaining(['/system/user/1/reset-password', '/config', '/config/2', '/config/2', '/config/reload', '/system/prompt/3/versions/4/publish', '/system/prompt/3/offline', '/system/prompt/3/rollback', '/system/prompt/3/versions/compare?leftVersionId=1&rightVersionId=2', '/system/prompt/3/release-logs']))
+  })
+  it('cancels a trip order through its documented endpoint', async () => {
+    const updated = { id: 'trip-1', status: 'CANCELLED' }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, data: updated }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(tripApi.cancelOrder('trip/1')).resolves.toEqual(updated)
+    expect(fetchMock.mock.calls[0][0]).toBe('/trip/orders/trip%2F1/cancel')
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST' })
   })
 })

@@ -23,7 +23,7 @@ const sidebar = ref<HTMLElement>()
 let previousFocus: HTMLElement | null = null
 const isAdmin = computed(() => auth.isAdmin && appConfig.features.admin)
 const displayName = computed(() => auth.user?.nickName?.trim() || auth.user?.username || '用户')
-const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/admin/traces': '智能体调用链路', '/trips': '我的行程', '/preferences': '偏好设置' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
+const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/admin/traces': '智能体调用链路', '/trips': '我的行程', '/preferences': '偏好设置', '/test': '测试工具' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
 const adminLinks = [
   { path: '/admin/users', label: '用户管理', icon: User },
   { path: '/admin/config', label: '系统配置', icon: Setting },
@@ -78,13 +78,13 @@ onMounted(() => {
 })
 onBeforeUnmount(() => window.removeEventListener('resize', closeOnDesktop))
 async function newConversation() {
-  if (conversations.sending) return
+  if (conversations.busy) return
   conversations.createConversation()
   await router.push('/workspace')
   mobileOpen.value = false
 }
 async function selectConversation(id: number) {
-  if (conversations.sending) return
+  if (conversations.busy) return
   try {
     await conversations.selectConversation(id)
     await router.push('/workspace')
@@ -98,7 +98,7 @@ async function toggleSearch() {
 }
 async function signOut() {
   try { await ElMessageBox.confirm('确定退出当前账号吗？', '退出登录', { confirmButtonText: '退出登录', cancelButtonText: '取消' }) } catch { return }
-  conversations.stop()
+  await conversations.stop().catch(() => undefined)
   await auth.logout()
   router.push('/login')
 }
@@ -114,7 +114,7 @@ async function signOut() {
         <button class="icon-button mobile-close" aria-label="关闭会话侧栏" @click="mobileOpen = false"><el-icon><Close /></el-icon></button>
       </div>
       <div class="sidebar-actions">
-        <button class="new-chat-button" :disabled="conversations.sending" title="新建对话" @click="newConversation"><el-icon><Plus /></el-icon><span class="sidebar-label">新建对话</span></button>
+        <button class="new-chat-button" :disabled="conversations.busy" title="新建对话" @click="newConversation"><el-icon><Plus /></el-icon><span class="sidebar-label">新建对话</span></button>
         <button class="icon-button search-button" aria-label="搜索会话" title="搜索会话" :aria-expanded="searchOpen" @click="toggleSearch"><el-icon><Search /></el-icon></button>
       </div>
       <div v-if="searchOpen && !collapsed" class="sidebar-search"><el-icon><Search /></el-icon><input ref="searchInput" v-model="search" aria-label="搜索历史会话" placeholder="搜索历史会话" /><button v-if="search" class="icon-button" aria-label="清空搜索" @click="search = ''"><el-icon><Close /></el-icon></button></div>
@@ -122,11 +122,12 @@ async function signOut() {
         <p v-if="loadError" class="sidebar-empty" role="alert">{{ loadError }}<button class="text-button" @click="load">重新加载</button></p>
         <p v-else-if="conversations.loading" class="sidebar-empty">正在加载会话…</p>
         <template v-else>
-          <section v-for="group in groups" :key="group.label" class="history-group"><h2>{{ group.label }}</h2><button v-for="item in group.items" :key="item.id" class="conversation-item" :class="{ active: item.id === conversations.activeId && route.path === '/workspace' }" :aria-current="item.id === conversations.activeId && route.path === '/workspace' ? 'page' : undefined" :disabled="conversations.sending" :title="item.title" @click="selectConversation(item.id)"><el-icon><ChatLineRound /></el-icon><span>{{ item.title }}</span></button></section>
+          <section v-for="group in groups" :key="group.label" class="history-group"><h2>{{ group.label }}</h2><button v-for="item in group.items" :key="item.id" class="conversation-item" :class="{ active: item.id === conversations.activeId && route.path === '/workspace' }" :aria-current="item.id === conversations.activeId && route.path === '/workspace' ? 'page' : undefined" :disabled="conversations.busy" :title="item.title" @click="selectConversation(item.id)"><el-icon><ChatLineRound /></el-icon><span>{{ item.title }}</span></button></section>
           <div v-if="!groups.length" class="sidebar-empty"><span>{{ search ? '没有找到相关会话' : '还没有历史对话' }}</span><small>{{ search ? '试试其他关键词' : '从一段新的差旅安排开始' }}</small></div>
         </template>
       </div>
       <div class="sidebar-bottom">
+        <RouterLink to="/test" class="test-tools-link" :class="{ active: route.path === '/test' }" title="测试工具"><el-icon><Connection /></el-icon><span class="sidebar-label">测试工具</span></RouterLink>
         <el-dropdown trigger="click" placement="top-start" class="account-dropdown"><button class="account-button" :aria-label="`${displayName}，账号菜单`"><UserAvatar class="account-avatar" :src="auth.user?.avatar" :name="displayName" :size="34" /><span class="account-details sidebar-label"><strong>{{ displayName }}</strong><small>{{ auth.isAdmin ? '管理员' : '企业员工' }}</small></span><el-icon class="sidebar-label"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item v-for="link in accountLinks" :key="link.path" @click="router.push(link.path)"><el-icon><component :is="link.icon" /></el-icon>{{ link.label }}</el-dropdown-item><el-dropdown-item divided @click="signOut"><el-icon><SwitchButton /></el-icon>退出登录</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
       </div>
     </aside>
@@ -166,6 +167,9 @@ async function signOut() {
 .sidebar-empty { display: flex; gap: 8px; flex-direction: column; padding: 12px 10px; color: var(--text-muted); font-size: 13px; line-height: 1.7; }
 .sidebar-empty small { font-size: 12px; }
 .sidebar-bottom { margin-top: auto; padding: 16px 0 12px; }
+.test-tools-link { display: flex; align-items: center; gap: 10px; min-height: 38px; margin-bottom: 8px; padding: 0 10px; border-radius: 6px; color: var(--text-muted); text-decoration: none; font-size: 13px; }
+.test-tools-link:hover, .test-tools-link.active { background: #e9ecf1; color: var(--accent); }
+.test-tools-link .el-icon { font-size: 16px; }
 .internal-label { display: flex; align-items: center; gap: 7px; margin: 0 10px 16px; color: var(--text-muted); font-size: 11px; }
 .internal-label > span { width: 5px; height: 5px; border-radius: 50%; background: #7d8b9e; }
 .account-dropdown { width: 100%; }
@@ -191,6 +195,7 @@ async function signOut() {
 .sidebar-collapsed .sidebar-actions { justify-content: center; }
 .sidebar-collapsed .new-chat-button { padding: 0; justify-content: center; }
 .sidebar-collapsed .account-button { padding: 7px; justify-content: center; }
+.sidebar-collapsed .test-tools-link { justify-content: center; padding: 0; }
 @media (max-width: 1050px) { .app-header { padding: 0 22px; } }
 @media (max-width: 720px) {
   .app-shell, .app-shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }

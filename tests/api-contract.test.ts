@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { authApi } from '@/api/authApi'
 import { configApi } from '@/api/configApi'
 import { promptApi } from '@/api/promptApi'
+import { providerApiKeyApi } from '@/api/providerApiKeyApi'
 import { userApi } from '@/api/userApi'
 import { tripApi } from '@/api/tripApi'
 import { appConfig } from '@/config'
@@ -56,6 +57,28 @@ describe('API contracts', () => {
     await promptApi.releaseLogs(3)
     const urls = fetchMock.mock.calls.map((call) => String(call[0]))
     expect(urls).toEqual(expect.arrayContaining(['/system/user/1/reset-password', '/config', '/config/2', '/config/2', '/config/reload', '/system/prompt/3/versions/4/publish', '/system/prompt/3/offline', '/system/prompt/3/rollback', '/system/prompt/3/versions/compare?leftVersionId=1&rightVersionId=2', '/system/prompt/3/release-logs']))
+  })
+  it('maps the per-user provider API key CRUD endpoints and payloads', async () => {
+    const response = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { status: 200 })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: [], pageNo: 1, pageSize: 20, totalCount: 0, totalPage: 0 }), { status: 200 }))
+      .mockResolvedValueOnce(response({ id: 7, providerCode: 'openai', status: 'ACTIVE' }))
+      .mockResolvedValueOnce(response({ id: 7, providerCode: 'openai', status: 'ACTIVE' }))
+      .mockResolvedValueOnce(response({}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await providerApiKeyApi.query({ pageNo: 1, pageSize: 20, providerCode: 'openai', status: 'ACTIVE' })
+    await providerApiKeyApi.create({ providerCode: 'openai', apiKey: 'secret-value', status: 'ACTIVE', remark: 'production' })
+    await providerApiKeyApi.update(7, { providerCode: 'openai', apiKey: 'rotated-secret', status: 'INACTIVE' })
+    await providerApiKeyApi.remove(7)
+
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      '/provider-api-keys?pageNo=1&pageSize=20&providerCode=openai&status=ACTIVE',
+      '/provider-api-keys', '/provider-api-keys/7', '/provider-api-keys/7',
+    ])
+    expect(fetchMock.mock.calls.map((call) => call[1]?.method || 'GET')).toEqual(['GET', 'POST', 'PUT', 'DELETE'])
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ providerCode: 'openai', apiKey: 'secret-value', status: 'ACTIVE', remark: 'production' })
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ providerCode: 'openai', apiKey: 'rotated-secret', status: 'INACTIVE' })
   })
   it('cancels a trip order through its documented endpoint', async () => {
     const updated = { id: 'trip-1', status: 'CANCELLED' }

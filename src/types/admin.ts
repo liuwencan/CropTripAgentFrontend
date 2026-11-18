@@ -15,6 +15,18 @@ export interface ConfigEntry {
   createTime?: string
 }
 
+export type ProviderApiKeyStatus = 'ACTIVE' | 'INACTIVE' | 'REVOKED'
+
+export interface ProviderApiKey {
+  id: number
+  userId?: number
+  providerCode: string
+  status: ProviderApiKeyStatus | string
+  remark?: string
+  createTime?: string
+  updateTime?: string
+}
+
 export interface PromptEntry {
   id: number
   promptKey: string

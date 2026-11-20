@@ -18,6 +18,20 @@ const emit = defineEmits<{ retry: [message: ConversationMessage]; askSubmit: [me
 const isUser = computed(() => props.message.role === 'user')
 const displayName = computed(() => props.user?.nickName?.trim() || props.user?.username || '用户')
 const showStreamStatus = computed(() => props.message.status === 'streaming' && !props.message.toolCalls?.some((tool) => tool.status === 'running') && !props.message.agentOutputs?.some((output) => output.status === 'running'))
+function isPayableUrl(value?: string) {
+  if (!value) return false
+  try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false }
+}
+function openPayment(url?: string) {
+  if (isPayableUrl(url)) window.open(url, '_blank', 'noopener,noreferrer')
+}
+function currencyLabel(currency?: string) {
+  if (!currency || currency === 'CNY' || currency === 'RMB') return '¥'
+  if (currency === 'USD') return '$'
+  if (currency === 'EUR') return '€'
+  if (currency === 'HKD') return 'HK$'
+  return currency
+}
 async function copy() {
   try { await navigator.clipboard.writeText(props.message.content); ElMessage.success('已复制回复') } catch { ElMessage.error('复制失败，请手动选择内容复制') }
 }
@@ -35,6 +49,19 @@ async function copy() {
       <AgentPlanList v-if="!isUser && message.plans?.length" :plans="message.plans" />
       <div class="message-bubble"><MarkdownContent v-if="!isUser && message.content" :source="message.content" :is-streaming="message.status === 'streaming'" /><p v-else-if="isUser">{{ message.content }}</p><p v-else-if="message.status === 'streaming' && !message.intentEvents?.length && !message.toolCalls?.length && !message.agentOutputs?.length && !message.plans?.length" class="stream-placeholder">正在整理你的需求…</p></div>
       <AskUserPrompt v-if="!isUser && message.ask" :prompt="message.ask" :submitted="message.askStatus === 'submitted'" @submit="(value, display) => emit('askSubmit', message, value, display)" />
+      <div v-if="!isUser && message.bookingResults?.length" class="booking-results" aria-label="预订结果">
+        <article v-for="(booking, index) in message.bookingResults" :key="booking.orderId || booking.payUrl || `${booking.title}-${index}`" class="booking-card">
+          <div class="booking-card-heading">
+            <div class="booking-card-title"><span class="booking-card-kicker">{{ booking.bizTypeLabel || '预订' }}</span><strong>{{ booking.title || '预订订单' }}</strong></div>
+            <span class="booking-status">{{ booking.statusLabel || '待支付' }}</span>
+          </div>
+          <div class="booking-card-meta">
+            <span v-if="booking.orderId">订单号 {{ booking.orderId }}</span>
+            <span v-if="booking.amount" class="booking-amount">{{ currencyLabel(booking.currency) }}{{ booking.amount }}</span>
+          </div>
+          <button class="booking-pay-button" type="button" :disabled="!isPayableUrl(booking.payUrl)" @click="openPayment(booking.payUrl)">立即支付</button>
+        </article>
+      </div>
       <div v-if="message.status === 'failed'" class="message-error" role="alert"><span>{{ message.error || '响应失败，请重试' }}</span><el-button link type="primary" :icon="Refresh" @click="emit('retry', message)">重新生成</el-button></div>
       <div v-else-if="message.status === 'cancelled'" class="message-error"><span v-if="!message.content">已暂停生成</span><el-button link type="primary" @click="emit('retry', message)">重新生成</el-button></div>
       <div v-else-if="!isUser && message.content && message.status === 'completed'" class="message-tools"><button class="icon-button" aria-label="复制回复" title="复制回复" @click="copy"><el-icon><CopyDocument /></el-icon></button><span><el-icon><Check /></el-icon>回复完成</span></div>
@@ -55,6 +82,19 @@ async function copy() {
 .progress-connector { display: block; height: var(--progress-connector-height); }
 .message-bubble { padding: 0; }
 .message-bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.85; font-size: 14px; }
+.booking-results { display: grid; gap: 12px; margin-top: 16px; }
+.booking-card { width: min(100%, 420px); padding: 16px; border: 1px solid #dce4f2; border-radius: 8px; background: #fbfcff; box-shadow: 0 5px 16px rgba(43, 65, 103, .06); }
+.booking-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.booking-card-title { min-width: 0; display: grid; gap: 5px; }
+.booking-card-title strong { color: var(--text); font-size: 14px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.booking-card-kicker { color: var(--accent); font-size: 11px; }
+.booking-status { flex-shrink: 0; padding: 3px 7px; border-radius: 4px; background: #fff4df; color: #9b6819; font-size: 11px; }
+.booking-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 13px; color: var(--text-muted); font-size: 11px; }
+.booking-card-meta span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.booking-amount { flex-shrink: 0; color: var(--text); font-size: 16px; font-weight: 600; }
+.booking-pay-button { width: 100%; min-height: 36px; margin-top: 14px; border: 0; border-radius: 6px; background: var(--accent); color: white; font-size: 13px; cursor: pointer; transition: background .16s ease; }
+.booking-pay-button:hover:not(:disabled) { background: #274ba2; }
+.booking-pay-button:disabled { background: #b8c1d2; color: #f8f9fb; cursor: not-allowed; }
 .is-user { flex-direction: row; align-items: flex-start; justify-content: flex-end; padding-left: 0; gap: 9px; }
 .is-user .message-content { width: auto; max-width: min(calc(100% - 41px), 620px); }
 .is-user .message-bubble { padding: 12px 18px; border-radius: 12px; background: #f1f3f7; color: #354156; }

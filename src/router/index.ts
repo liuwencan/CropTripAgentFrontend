@@ -12,6 +12,7 @@ export const router = createRouter({
       { path: 'workspace', name: 'workspace', component: () => import('@/views/WorkspaceView.vue') },
       { path: 'trips', name: 'my-trips', component: () => import('@/views/MyTripsView.vue') },
       { path: 'preferences', name: 'preferences', component: () => import('@/views/PreferenceView.vue') },
+      { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
       { path: 'provider-api-keys', name: 'provider-api-keys', component: () => import('@/views/ProviderApiKeyView.vue') },
       { path: 'test', name: 'test-tools', component: () => import('@/views/TestToolsView.vue') },
       { path: 'admin/trips', name: 'admin-trips', component: () => import('@/views/admin/TripManagementView.vue'), meta: { admin: true } },

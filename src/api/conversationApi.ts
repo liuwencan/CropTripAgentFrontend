@@ -8,7 +8,7 @@ import type { PageResponse } from '@/types/api'
 
 import { mockConversation, mockStream } from '@/mocks/fixtures'
 
-const SSE_REQUEST_TIMEOUT_MS = 31 * 60 * 1000
+const SSE_REQUEST_TIMEOUT_MS = 2 * 60 * 60 * 1000
 
 const mockConversations: Conversation[] = [{ ...mockConversation, messageCount: 0 }]
 const mockMessages = new Map<number, ConversationMessage[]>()

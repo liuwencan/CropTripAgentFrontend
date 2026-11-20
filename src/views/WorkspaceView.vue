@@ -36,7 +36,7 @@ function trackScroll() {
   const el = scroller.value
   if (el) autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 100
 }
-watch(() => conversations.messages.map((message) => [message.content, message.status, message.askStatus, message.intentEvents?.map((event) => event.type === 'intent_progress' || event.type === 'recognition_result' ? [event.type, event.sequence, event.payload.status, event.payload.stage] : [event.type, event.sequence]), message.toolCalls?.map((tool) => [tool.status, tool.result]), message.agentOutputs?.map((output) => [output.status, output.content]), message.plans?.map((plan) => plan.tasks.map((task) => [task.name, task.state]))]), async () => {
+watch(() => conversations.messages.map((message) => [message.content, message.status, message.askStatus, message.intentEvents?.map((event) => event.type === 'intent_progress' || event.type === 'recognition_result' ? [event.type, event.sequence, event.payload.status, event.payload.stage] : [event.type, event.sequence]), message.toolCalls?.map((tool) => [tool.status, tool.result]), message.agentOutputs?.map((output) => [output.status, output.content]), message.plans?.map((plan) => plan.tasks.map((task) => [task.name, task.state])), message.bookingResults?.map((booking) => [booking.orderId, booking.payUrl, booking.statusLabel])]), async () => {
   await nextTick()
   if (scroller.value && autoScroll.value) scroller.value.scrollTop = scroller.value.scrollHeight
 })

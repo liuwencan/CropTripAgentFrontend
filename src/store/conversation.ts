@@ -192,6 +192,15 @@ export const useConversationStore = defineStore('conversation', () => {
           awaitingInput = true
           continue
         }
+        if (event.type === 'booking_result') {
+          assistant.bookingResults ??= []
+          const alreadyAdded = assistant.bookingResults.some((result) => (
+            (result.orderId && result.orderId === event.payload.orderId) ||
+            (result.payUrl && result.payUrl === event.payload.payUrl)
+          ))
+          if (!alreadyAdded) assistant.bookingResults.push(event.payload)
+          continue
+        }
         if (event.type === 'workflow.update' || event.type === 'action.confirmation_required') workflowEvents.value.push(event)
         if (event.type === 'message.delta') {
           if (event.sequence <= (assistant.sequence ?? -1)) continue

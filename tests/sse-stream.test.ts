@@ -44,4 +44,14 @@ describe('readSseStream', () => {
     expect(events[0]).toMatchObject({ type: 'message.delta', payload: { content: '我来查询天气' } })
     expect(events[1]).toMatchObject({ type: 'ask', payload: { delta: { ui_type: 'form' }, toolCallId: 'call-weather' } })
   })
+  it('reads a booking result frame as a typed event', async () => {
+    const stream = new Response('event:booking_result\ndata:{"type":"booking_result","bizType":"flight","bizTypeLabel":"机票","orderId":"A123","title":"北京→上海 MU5101","amount":"1280.00","currency":"CNY","payUrl":"https://pay.example/order/A123","statusLabel":"待支付"}\n\n')
+    const events = []
+    for await (const event of readSseStream(stream)) events.push(event)
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: 'booking_result',
+      payload: { bizType: 'flight', orderId: 'A123', amount: '1280.00', payUrl: 'https://pay.example/order/A123' },
+    })
+  })
 })

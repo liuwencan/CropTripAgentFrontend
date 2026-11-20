@@ -43,7 +43,7 @@ describe('conversation store', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/agent/conversations'))).toBe(false)
     appConfig.enableMock = true
   })
-  it('keeps chat and resume SSE requests alive for the backend 30-minute timeout', async () => {
+  it('keeps chat and resume SSE requests alive for two hours', async () => {
     appConfig.enableMock = false
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('event: complete\ndata: {}\n\n', { status: 200 })))
@@ -51,7 +51,7 @@ describe('conversation store', () => {
     for await (const _event of conversationApi.stream(12, 'Plan trip')) { /* consume */ }
     for await (const _event of conversationApi.resume(12, 'ask-call-1', 'Shanghai')) { /* consume */ }
 
-    expect(timeoutSpy.mock.calls.map(([_, delay]) => delay)).toEqual([31 * 60 * 1000, 31 * 60 * 1000])
+    expect(timeoutSpy.mock.calls.map(([_, delay]) => delay)).toEqual([2 * 60 * 60 * 1000, 2 * 60 * 60 * 1000])
     appConfig.enableMock = true
   })
   it('streams ordered assistant content without duplicating user messages', async () => {
@@ -345,5 +345,28 @@ describe('conversation store', () => {
         { type: 'intent_end', payload: { traceId: 'trace-1' } },
       ],
     })
+  })
+  it('attaches booking results to the assistant message without adding them to prose', async () => {
+    vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (): AsyncGenerator<StreamEvent> {
+      yield {
+        version: 1,
+        type: 'booking_result',
+        sequence: 0,
+        payload: { type: 'booking_result', bizType: 'flight', bizTypeLabel: '机票', orderId: 'A123', title: '北京→上海 MU5101', amount: '1280.00', payUrl: 'https://pay.example/order/A123', statusLabel: '待支付' },
+      }
+      yield {
+        version: 1,
+        type: 'booking_result',
+        sequence: 1,
+        payload: { type: 'booking_result', bizType: 'flight', orderId: 'A123', title: '北京→上海 MU5101', amount: '1280.00', payUrl: 'https://pay.example/order/A123' },
+      }
+    })
+    const store = useConversationStore()
+
+    await store.send('订一张机票')
+
+    expect(store.messages.at(-1)?.bookingResults).toHaveLength(1)
+    expect(store.messages.at(-1)?.bookingResults?.[0]).toMatchObject({ orderId: 'A123', payUrl: 'https://pay.example/order/A123' })
+    expect(store.messages.at(-1)?.content).toBe('')
   })
 })

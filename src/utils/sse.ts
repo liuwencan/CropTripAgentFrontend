@@ -1,4 +1,4 @@
-import type { AgentPlan, AskUserPrompt, IntentProgressPayload, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
+import type { AgentPlan, AskUserPrompt, BookingResult, IntentProgressPayload, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
 
 function extractDelta(value: unknown): string | undefined {
   if (typeof value === 'string') return value
@@ -66,6 +66,21 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
   const payload = parsed as Record<string, unknown>
   try {
+    const bookingPayload = parseObject(payload.payload) ?? parseObject(payload.data) ?? payload
+    if (eventName === 'booking_result' || payload.type === 'booking_result' || bookingPayload.type === 'booking_result') {
+      const result: BookingResult = {
+        type: 'booking_result',
+        ...(typeof bookingPayload.bizType === 'string' ? { bizType: bookingPayload.bizType } : {}),
+        ...(typeof bookingPayload.bizTypeLabel === 'string' ? { bizTypeLabel: bookingPayload.bizTypeLabel } : {}),
+        ...(typeof bookingPayload.orderId === 'string' ? { orderId: bookingPayload.orderId } : {}),
+        ...(typeof bookingPayload.title === 'string' ? { title: bookingPayload.title } : {}),
+        ...(typeof bookingPayload.amount === 'string' || typeof bookingPayload.amount === 'number' ? { amount: String(bookingPayload.amount) } : {}),
+        ...(typeof bookingPayload.currency === 'string' ? { currency: bookingPayload.currency } : {}),
+        ...(typeof bookingPayload.payUrl === 'string' ? { payUrl: bookingPayload.payUrl } : {}),
+        ...(typeof bookingPayload.statusLabel === 'string' ? { statusLabel: bookingPayload.statusLabel } : {}),
+      }
+      return { version: 1, type: 'booking_result', sequence: typeof payload.sequence === 'number' ? payload.sequence : fallbackSequence, payload: result }
+    }
     const deltaContent = [payload.delta, payload.content, payload.text, payload.payload, payload.data]
       .map(extractDelta)
       .find((content) => content !== undefined)

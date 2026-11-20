@@ -23,7 +23,7 @@ const sidebar = ref<HTMLElement>()
 let previousFocus: HTMLElement | null = null
 const isAdmin = computed(() => auth.isAdmin && appConfig.features.admin)
 const displayName = computed(() => auth.user?.nickName?.trim() || auth.user?.username || '用户')
-const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/admin/traces': '智能体调用链路', '/trips': '我的行程', '/preferences': '偏好设置', '/provider-api-keys': '第三方平台 API Key', '/test': '测试工具' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
+const pageTitle = computed(() => ({ '/admin/users': '用户管理', '/admin/config': '系统配置', '/admin/prompts': 'Prompt 管理', '/admin/trips': '行程管理', '/admin/traces': '智能体调用链路', '/trips': '我的行程', '/profile': '个人资料', '/preferences': '偏好设置', '/provider-api-keys': '第三方平台 API Key', '/test': '测试工具' }[route.path] || conversations.activeConversation?.title || '新的差旅对话'))
 const adminLinks = [
   { path: '/admin/users', label: '用户管理', icon: User },
   { path: '/admin/config', label: '系统配置', icon: Setting },
@@ -36,7 +36,7 @@ const tripLinks = computed(() => [
   { path: '/preferences', label: '偏好设置', icon: Star },
   { path: '/provider-api-keys', label: '第三方平台 API Key', icon: Key },
 ])
-const accountLinks = computed(() => [...tripLinks.value, ...(isAdmin.value ? adminLinks : [])])
+const accountLinks = computed(() => [{ path: '/profile', label: '个人资料', icon: User }, ...tripLinks.value, ...(isAdmin.value ? adminLinks : [])])
 const groups = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const week = today.getTime() - 6 * 86400000

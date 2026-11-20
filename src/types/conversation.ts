@@ -102,6 +102,19 @@ export interface ConversationMessage extends Message {
   ask?: AskUserPrompt
   askToolCallId?: string
   askStatus?: 'pending' | 'submitted'
+  bookingResults?: BookingResult[]
+}
+
+export interface BookingResult {
+  type: 'booking_result'
+  bizType?: string
+  bizTypeLabel?: string
+  orderId?: string
+  title?: string
+  amount?: string
+  currency?: string
+  payUrl?: string
+  statusLabel?: string
 }
 
 export type IntentEvent =
@@ -191,3 +204,4 @@ export type StreamEvent =
   | IntentEvent
   | { version: number; type: 'error'; sequence: number; messageId?: number; payload: { message: string } }
   | { version: number; type: 'done'; sequence: number; messageId?: number; payload?: ConversationCompletePayload }
+  | { version: number; type: 'booking_result'; sequence: number; messageId?: number; payload: BookingResult }

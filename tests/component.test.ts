@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import MessageComposer from '@/components/MessageComposer.vue'
 import ConversationMessage from '@/components/ConversationMessage.vue'
@@ -65,6 +65,27 @@ describe('shared interaction components', () => {
 
     expect(wrapper.text()).toContain(response)
     expect(wrapper.text()).not.toContain('已暂停生成')
+  })
+  it('renders a booking card and opens only a valid payment link', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const wrapper = mount(ConversationMessage, {
+      props: { message: {
+        id: 3, conversationId: 12, role: 'assistant', content: '', status: 'completed',
+        bookingResults: [
+          { type: 'booking_result', bizTypeLabel: '机票', orderId: 'A123', title: '北京→上海 MU5101', amount: '1280.00', currency: '¥', payUrl: 'https://pay.example/order/A123', statusLabel: '待支付' },
+          { type: 'booking_result', orderId: 'B234', title: '无效链接订单', payUrl: 'javascript:alert(1)' },
+        ],
+      } },
+      global: { stubs: { TravelBrand: true, UserAvatar: true, MarkdownContent: true, 'el-icon': true, 'el-button': true } },
+    })
+
+    expect(wrapper.find('.booking-card').text()).toContain('北京→上海 MU5101')
+    expect(wrapper.find('.booking-card').text()).toContain('1280.00')
+    const buttons = wrapper.findAll('.booking-pay-button')
+    expect(buttons).toHaveLength(2)
+    await buttons[0]!.trigger('click')
+    expect(open).toHaveBeenCalledWith('https://pay.example/order/A123', '_blank', 'noopener,noreferrer')
+    expect(buttons[1]!.attributes('disabled')).toBeDefined()
   })
   it('renders selectable clarification options and emits a readable answer', async () => {
     const wrapper = mount(AskUserPrompt, { props: { prompt: { question: '选择出发城市', ui_type: 'select', options: ['北京', '上海'] } }, global: { stubs: { 'el-icon': true } } })

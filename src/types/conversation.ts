@@ -103,6 +103,13 @@ export interface ConversationMessage extends Message {
   askToolCallId?: string
   askStatus?: 'pending' | 'submitted'
   bookingResults?: BookingResult[]
+  recommendedQuestions?: string[]
+}
+
+export interface RecommendedQuestionsPayload {
+  questions: string[]
+  count?: number
+  format?: string
 }
 
 export interface BookingResult {
@@ -205,3 +212,4 @@ export type StreamEvent =
   | { version: number; type: 'error'; sequence: number; messageId?: number; payload: { message: string } }
   | { version: number; type: 'done'; sequence: number; messageId?: number; payload?: ConversationCompletePayload }
   | { version: number; type: 'booking_result'; sequence: number; messageId?: number; payload: BookingResult }
+  | { version: number; type: 'recommend_questions'; sequence: number; messageId?: number; payload: RecommendedQuestionsPayload }

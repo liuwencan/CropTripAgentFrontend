@@ -20,6 +20,14 @@ describe('parseSseEvent', () => {
     expect(parseSseEvent('data:{"type":"complete","conversationId":29}')).toMatchObject({ type: 'message.done', payload: { conversationId: 29 } })
     expect(parseSseEvent('data:{"type":"complete","sequence":6,"conversationId":30}')).toMatchObject({ type: 'message.done', sequence: 6, payload: { conversationId: 30 } })
   })
+  it('extracts recommended questions from the named event payload', () => {
+    expect(parseSseEvent('event: RECOMMEND_QUESTIONS\ndata: {"format":"recommend_questions.v1","count":3,"questions":[" 问题1 ","问题2","问题1",""]}', 5)).toEqual({
+      version: 1,
+      type: 'recommend_questions',
+      sequence: 5,
+      payload: { format: 'recommend_questions.v1', count: 3, questions: ['问题1', '问题2'] },
+    })
+  })
   it('normalizes the named ask event emitted by the agent pipeline', () => {
     const event = parseSseEvent('event: ask\ndata: {"conversationId":7,"delta":{"question":"出发城市是哪里？","ui_type":"select","options":["北京","上海"],"allow_other":true}}')
     expect(event).toMatchObject({ type: 'ask', sequence: 0, payload: { conversationId: 7, delta: { question: '出发城市是哪里？', ui_type: 'select', options: ['北京', '上海'], allow_other: true } } })

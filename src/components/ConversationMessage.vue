@@ -14,7 +14,7 @@ import type { ConversationMessage } from '@/types/conversation'
 import { formatDate } from '@/utils/format'
 
 const props = defineProps<{ message: ConversationMessage; user?: User | null }>()
-const emit = defineEmits<{ retry: [message: ConversationMessage]; askSubmit: [message: ConversationMessage, value: unknown, display: string] }>()
+const emit = defineEmits<{ retry: [message: ConversationMessage]; askSubmit: [message: ConversationMessage, value: unknown, display: string]; recommendSelect: [question: string] }>()
 const isUser = computed(() => props.message.role === 'user')
 const displayName = computed(() => props.user?.nickName?.trim() || props.user?.username || '用户')
 const showStreamStatus = computed(() => props.message.status === 'streaming' && !props.message.toolCalls?.some((tool) => tool.status === 'running') && !props.message.agentOutputs?.some((output) => output.status === 'running'))
@@ -65,6 +65,10 @@ async function copy() {
       <div v-if="message.status === 'failed'" class="message-error" role="alert"><span>{{ message.error || '响应失败，请重试' }}</span><el-button link type="primary" :icon="Refresh" @click="emit('retry', message)">重新生成</el-button></div>
       <div v-else-if="message.status === 'cancelled'" class="message-error"><span v-if="!message.content">已暂停生成</span><el-button link type="primary" @click="emit('retry', message)">重新生成</el-button></div>
       <div v-else-if="!isUser && message.content && message.status === 'completed'" class="message-tools"><button class="icon-button" aria-label="复制回复" title="复制回复" @click="copy"><el-icon><CopyDocument /></el-icon></button><span><el-icon><Check /></el-icon>回复完成</span></div>
+      <div v-if="!isUser && message.status === 'completed' && message.recommendedQuestions?.length" class="recommended-questions" aria-label="推荐问题">
+        <span class="recommended-questions-label">你还可以继续问</span>
+        <button v-for="question in message.recommendedQuestions" :key="question" type="button" class="recommended-question" @click="emit('recommendSelect', question)">{{ question }}</button>
+      </div>
       <time v-if="isUser && message.createTime" class="message-time">{{ formatDate(message.createTime) }}</time>
     </div>
     <UserAvatar v-if="isUser" class="message-user-avatar" :src="user?.avatar" :name="displayName" :size="32" />
@@ -95,6 +99,10 @@ async function copy() {
 .booking-pay-button { width: 100%; min-height: 36px; margin-top: 14px; border: 0; border-radius: 6px; background: var(--accent); color: white; font-size: 13px; cursor: pointer; transition: background .16s ease; }
 .booking-pay-button:hover:not(:disabled) { background: #274ba2; }
 .booking-pay-button:disabled { background: #b8c1d2; color: #f8f9fb; cursor: not-allowed; }
+.recommended-questions { display: grid; gap: 8px; margin-top: 16px; }
+.recommended-questions-label { color: var(--text-muted); font-size: 11px; }
+.recommended-question { width: fit-content; max-width: 100%; padding: 8px 12px; border: 1px solid #d8e0ee; border-radius: 6px; background: #fff; color: #45619b; font-size: 12px; line-height: 1.5; text-align: left; cursor: pointer; overflow-wrap: anywhere; transition: border-color .16s ease, background .16s ease; }
+.recommended-question:hover { border-color: #9eb4e4; background: #f7f9fe; }
 .is-user { flex-direction: row; align-items: flex-start; justify-content: flex-end; padding-left: 0; gap: 9px; }
 .is-user .message-content { width: auto; max-width: min(calc(100% - 41px), 620px); }
 .is-user .message-bubble { padding: 12px 18px; border-radius: 12px; background: #f1f3f7; color: #354156; }

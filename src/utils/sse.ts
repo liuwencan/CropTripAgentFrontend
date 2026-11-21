@@ -1,4 +1,4 @@
-import type { AgentPlan, AskUserPrompt, BookingResult, IntentProgressPayload, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
+import type { AgentPlan, AskUserPrompt, BookingResult, IntentProgressPayload, RecommendedQuestionsPayload, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
 
 function extractDelta(value: unknown): string | undefined {
   if (typeof value === 'string') return value
@@ -67,6 +67,19 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
   const payload = parsed as Record<string, unknown>
   try {
     const bookingPayload = parseObject(payload.payload) ?? parseObject(payload.data) ?? payload
+    const recommendationPayload = parseObject(payload.payload) ?? parseObject(payload.data) ?? payload
+    if (eventName?.toLowerCase() === 'recommend_questions' || String(payload.eventType ?? '').toLowerCase() === 'recommend_questions' || payload.type === 'recommend_questions' || recommendationPayload.format === 'recommend_questions.v1') {
+      const questions = Array.isArray(recommendationPayload.questions)
+        ? recommendationPayload.questions.filter((question): question is string => typeof question === 'string' && question.trim().length > 0).map((question) => question.trim())
+        : []
+      if (!questions.length) return null
+      const recommendedQuestions: RecommendedQuestionsPayload = {
+        questions: [...new Set(questions)],
+        ...(typeof recommendationPayload.count === 'number' ? { count: recommendationPayload.count } : {}),
+        ...(typeof recommendationPayload.format === 'string' ? { format: recommendationPayload.format } : {}),
+      }
+      return { version: 1, type: 'recommend_questions', sequence: typeof payload.sequence === 'number' ? payload.sequence : fallbackSequence, payload: recommendedQuestions }
+    }
     if (eventName === 'booking_result' || payload.type === 'booking_result' || bookingPayload.type === 'booking_result') {
       const result: BookingResult = {
         type: 'booking_result',

@@ -201,6 +201,10 @@ export const useConversationStore = defineStore('conversation', () => {
           if (!alreadyAdded) assistant.bookingResults.push(event.payload)
           continue
         }
+        if (event.type === 'recommend_questions') {
+          assistant.recommendedQuestions = event.payload.questions
+          continue
+        }
         if (event.type === 'workflow.update' || event.type === 'action.confirmation_required') workflowEvents.value.push(event)
         if (event.type === 'message.delta') {
           if (event.sequence <= (assistant.sequence ?? -1)) continue

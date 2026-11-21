@@ -36,7 +36,7 @@ function trackScroll() {
   const el = scroller.value
   if (el) autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 100
 }
-watch(() => conversations.messages.map((message) => [message.content, message.status, message.askStatus, message.intentEvents?.map((event) => event.type === 'intent_progress' || event.type === 'recognition_result' ? [event.type, event.sequence, event.payload.status, event.payload.stage] : [event.type, event.sequence]), message.toolCalls?.map((tool) => [tool.status, tool.result]), message.agentOutputs?.map((output) => [output.status, output.content]), message.plans?.map((plan) => plan.tasks.map((task) => [task.name, task.state])), message.bookingResults?.map((booking) => [booking.orderId, booking.payUrl, booking.statusLabel])]), async () => {
+watch(() => conversations.messages.map((message) => [message.content, message.status, message.askStatus, message.recommendedQuestions, message.intentEvents?.map((event) => event.type === 'intent_progress' || event.type === 'recognition_result' ? [event.type, event.sequence, event.payload.status, event.payload.stage] : [event.type, event.sequence]), message.toolCalls?.map((tool) => [tool.status, tool.result]), message.agentOutputs?.map((output) => [output.status, output.content]), message.plans?.map((plan) => plan.tasks.map((task) => [task.name, task.state])), message.bookingResults?.map((booking) => [booking.orderId, booking.payUrl, booking.statusLabel])]), async () => {
   await nextTick()
   if (scroller.value && autoScroll.value) scroller.value.scrollTop = scroller.value.scrollHeight
 })
@@ -67,6 +67,7 @@ async function submitAsk(message: ConversationMessageData, _value: unknown, disp
   }
 }
 function starter(text: string) { composer.value?.setDraft(text) }
+function selectRecommendedQuestion(question: string) { composer.value?.setDraft(question) }
 async function pauseGeneration() {
   try { await conversations.stop() } catch {
     ElMessage.error('暂停请求失败，后台任务可能仍在运行；请检查网络后重试')
@@ -82,7 +83,7 @@ async function pauseGeneration() {
         <h1>这次出差，有什么可以帮你？</h1>
         <p>查询差旅标准、规划出行安排，让每一步都有依据。</p>
       </div>
-      <div v-else class="message-thread"><ConversationMessage v-for="message in conversations.messages" :key="message.id" :message="message" :user="auth.user" @retry="conversations.retry" @ask-submit="submitAsk" /><TravelWorkflowBlock v-for="block in workflowBlocks" :key="block.workflowId" :block="block" @confirm="workflow.confirm" @cancel="workflow.cancel" /></div>
+      <div v-else class="message-thread"><ConversationMessage v-for="message in conversations.messages" :key="message.id" :message="message" :user="auth.user" @retry="conversations.retry" @ask-submit="submitAsk" @recommend-select="selectRecommendedQuestion" /><TravelWorkflowBlock v-for="block in workflowBlocks" :key="block.workflowId" :block="block" @confirm="workflow.confirm" @cancel="workflow.cancel" /></div>
     </section>
     <div class="composer-dock">
       <MessageComposer ref="composer" :key="conversations.activeId ?? 'new'" :sending="conversations.sending" :interrupting="conversations.interrupting" @send="send" @stop="pauseGeneration" />

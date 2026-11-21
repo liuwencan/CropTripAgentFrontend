@@ -87,6 +87,18 @@ describe('shared interaction components', () => {
     expect(open).toHaveBeenCalledWith('https://pay.example/order/A123', '_blank', 'noopener,noreferrer')
     expect(buttons[1]!.attributes('disabled')).toBeDefined()
   })
+  it('shows completed recommended questions and emits a selected draft', async () => {
+    const wrapper = mount(ConversationMessage, {
+      props: { message: { id: 8, conversationId: 12, role: 'assistant', content: '已为你整理行程。', status: 'completed', recommendedQuestions: ['查询酒店差标', '规划返程'] } },
+      global: { stubs: { TravelBrand: true, UserAvatar: true, MarkdownContent: true, 'el-icon': true, 'el-button': true } },
+    })
+
+    expect(wrapper.findAll('.recommended-question')).toHaveLength(2)
+    await wrapper.find('.recommended-question').trigger('click')
+    expect(wrapper.emitted('recommendSelect')?.[0]).toEqual(['查询酒店差标'])
+    await wrapper.setProps({ message: { id: 8, conversationId: 12, role: 'assistant', content: '回复中', status: 'streaming', recommendedQuestions: ['查询酒店差标'] } })
+    expect(wrapper.find('.recommended-questions').exists()).toBe(false)
+  })
   it('renders selectable clarification options and emits a readable answer', async () => {
     const wrapper = mount(AskUserPrompt, { props: { prompt: { question: '选择出发城市', ui_type: 'select', options: ['北京', '上海'] } }, global: { stubs: { 'el-icon': true } } })
     await wrapper.get('input[value="上海"]').setValue(true)

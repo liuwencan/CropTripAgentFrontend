@@ -236,14 +236,7 @@ export const useConversationStore = defineStore('conversation', () => {
     if (!content.trim() || busy.value) return
     sending.value = true
     try {
-      let conversationId = activeId.value
-      if (conversationId === null) {
-        const conversation = await conversationApi.create(content.trim().slice(0, 24))
-        conversationId = conversation.id
-        if (!Number.isFinite(conversationId) || conversationId <= 0) throw new Error('创建会话接口未返回有效会话号')
-        activeId.value = conversationId
-        if (!conversations.value.some((item) => item.id === conversationId)) conversations.value.unshift(conversation)
-      }
+      const conversationId = activeId.value
       const userMessage = await conversationApi.sendMessage(conversationId, content.trim())
       messages.value.push(userMessage)
       const assistant = reactive<ConversationMessage>({ id: Date.now() + 1, conversationId: conversationId ?? 0, role: 'assistant', content: '', status: 'streaming', sequence: -1 })

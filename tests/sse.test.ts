@@ -28,6 +28,14 @@ describe('parseSseEvent', () => {
       payload: { format: 'recommend_questions.v1', count: 3, questions: ['问题1', '问题2'] },
     })
   })
+  it('reads the question array from the current recommend_questions payload', () => {
+    expect(parseSseEvent('event:recommend_questions\ndata:{"question":["帮我查询相关的差旅政策和限制条件。","帮我规划交通、住宿和日程候选方案。","帮我查询相关的出差申请和审批进度。"]}')).toEqual({
+      version: 1,
+      type: 'recommend_questions',
+      sequence: 0,
+      payload: { questions: ['帮我查询相关的差旅政策和限制条件。', '帮我规划交通、住宿和日程候选方案。', '帮我查询相关的出差申请和审批进度。'] },
+    })
+  })
   it('normalizes the named ask event emitted by the agent pipeline', () => {
     const event = parseSseEvent('event: ask\ndata: {"conversationId":7,"delta":{"question":"出发城市是哪里？","ui_type":"select","options":["北京","上海"],"allow_other":true}}')
     expect(event).toMatchObject({ type: 'ask', sequence: 0, payload: { conversationId: 7, delta: { question: '出发城市是哪里？', ui_type: 'select', options: ['北京', '上海'], allow_other: true } } })

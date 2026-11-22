@@ -69,9 +69,10 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
     const bookingPayload = parseObject(payload.payload) ?? parseObject(payload.data) ?? payload
     const recommendationPayload = parseObject(payload.payload) ?? parseObject(payload.data) ?? payload
     if (eventName?.toLowerCase() === 'recommend_questions' || String(payload.eventType ?? '').toLowerCase() === 'recommend_questions' || payload.type === 'recommend_questions' || recommendationPayload.format === 'recommend_questions.v1') {
-      const questions = Array.isArray(recommendationPayload.questions)
-        ? recommendationPayload.questions.filter((question): question is string => typeof question === 'string' && question.trim().length > 0).map((question) => question.trim())
-        : []
+      const questionValues = recommendationPayload.question ?? recommendationPayload.questions
+      const questions = (Array.isArray(questionValues) ? questionValues : typeof questionValues === 'string' ? [questionValues] : [])
+        .filter((question): question is string => typeof question === 'string' && question.trim().length > 0)
+        .map((question) => question.trim())
       if (!questions.length) return null
       const recommendedQuestions: RecommendedQuestionsPayload = {
         questions: [...new Set(questions)],

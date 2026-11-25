@@ -6,7 +6,7 @@ import { useConversationStore } from '@/store/conversation'
 import { conversationApi } from '@/api/conversationApi'
 import type { StreamEvent } from '@/types/conversation'
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('conversation store', () => {
   beforeEach(() => { setActivePinia(createPinia()); appConfig.enableMock = true })
@@ -61,14 +61,19 @@ describe('conversation store', () => {
     expect(store.messages.at(-1)?.content).toContain('差旅建议')
     expect(store.messages.at(-1)?.status).toBe('completed')
   })
-  it('starts the first chat without creating a backend conversation and adopts its streamed id', async () => {
+  it('creates a persisted conversation before the first chat and reuses its id for an ask without an id', async () => {
     const create = vi.spyOn(conversationApi, 'create').mockResolvedValue({
       id: 88, title: 'Plan trip', status: 'ACTIVE', messageCount: 0, createTime: new Date().toISOString(),
     })
     let streamedConversationId: number | null | undefined
     vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (conversationId): AsyncGenerator<StreamEvent> {
       streamedConversationId = conversationId
-      yield { version: 1, type: 'ask', sequence: 0, payload: { conversationId: 88, toolCallId: 'ask-call-88', delta: { question: '补充信息？', ui_type: 'text' } } }
+      yield { version: 1, type: 'ask', sequence: 0, payload: { toolCallId: 'ask-call-88', delta: { question: '补充信息？', ui_type: 'text' } } }
+    })
+    let resumedConversationId: number | undefined
+    vi.spyOn(conversationApi, 'resume').mockImplementation(async function* (conversationId): AsyncGenerator<StreamEvent> {
+      resumedConversationId = conversationId
+      yield { version: 1, type: 'done', sequence: 0 }
     })
     const store = useConversationStore()
 
@@ -78,27 +83,72 @@ describe('conversation store', () => {
     expect(store.messages).toEqual([])
 
     await store.send('Plan trip')
-    expect(create).not.toHaveBeenCalled()
-    expect(streamedConversationId).toBeNull()
-    expect(store.activeId).toBe(88)
-    expect(store.messages[0]?.conversationId).toBe(88)
+    const conversationId = store.activeId
+    expect(create).toHaveBeenCalledExactlyOnceWith('Plan trip')
+    expect(conversationId).toBe(88)
+    expect(streamedConversationId).toBe(conversationId)
+    expect(store.conversations[0]).toMatchObject({ id: 88, title: 'Plan trip' })
+    expect(store.messages[0]?.conversationId).toBe(conversationId)
+    expect(store.messages.at(-1)?.conversationId).toBe(conversationId)
     await store.answerAsk(store.messages.at(-1)!, 'Shanghai')
-    expect(store.messages.at(-1)?.conversationId).toBe(88)
+    expect(resumedConversationId).toBe(conversationId)
+    expect(store.messages.at(-1)?.conversationId).toBe(conversationId)
   })
-  it('starts a new chat even when no conversation id has been streamed yet', async () => {
-    vi.spyOn(conversationApi, 'create').mockResolvedValue({
-      id: 0, title: 'Plan trip', status: 'ACTIVE', messageCount: 0,
-    })
+  it('reuses an existing conversation without creating another one', async () => {
+    const create = vi.spyOn(conversationApi, 'create')
     const stream = vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (conversationId): AsyncGenerator<StreamEvent> {
-      expect(conversationId).toBeNull()
+      expect(conversationId).toBe(137)
       yield { version: 1, type: 'done', sequence: 0 }
     })
     const store = useConversationStore()
+    store.activeId = 137
 
     await store.send('Plan trip')
-    expect(stream).toHaveBeenCalledWith(null, 'Plan trip', expect.any(AbortSignal))
-    expect(conversationApi.create).not.toHaveBeenCalled()
+    expect(stream).toHaveBeenCalledWith(137, 'Plan trip', expect.any(AbortSignal))
+    expect(create).not.toHaveBeenCalled()
+    expect(store.activeId).toBe(137)
+  })
+  it('does not start chat or leave a local conversation when creation fails', async () => {
+    vi.spyOn(conversationApi, 'create').mockRejectedValue(new Error('创建会话失败'))
+    const stream = vi.spyOn(conversationApi, 'stream')
+    const store = useConversationStore()
+
+    await expect(store.send('Plan trip')).rejects.toThrow('创建会话失败')
+
+    expect(stream).not.toHaveBeenCalled()
     expect(store.activeId).toBeNull()
+    expect(store.conversations).toEqual([])
+    expect(store.messages).toEqual([])
+    expect(store.busy).toBe(false)
+  })
+  it('uses the server-created id across the real create, ask and resume requests', async () => {
+    appConfig.enableMock = false
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: {
+        id: 137, title: 'Plan trip', status: 'ACTIVE', messageCount: 0,
+      } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('event:ask\ndata:{"toolCallId":"call-form-137","input":{"question":"出发城市？","ui_type":"form","fields":[{"name":"origin","label":"出发城市","required":true,"type":"text"}]}}\n\n', { status: 200 }))
+      .mockResolvedValueOnce(new Response('event:delta\ndata:{"delta":"已记录"}\n\nevent:complete\ndata:{"conversationId":137}\n\n', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const store = useConversationStore()
+
+    await store.send('Plan trip')
+    const ask = store.messages.at(-1)!
+    expect(ask).toMatchObject({ conversationId: 137, status: 'awaiting-input', askToolCallId: 'call-form-137' })
+    await store.answerAsk(ask, '杭州')
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      expect.stringContaining('/agent/conversations'),
+      expect.stringContaining('/chat/chat'),
+      expect.stringContaining('/chat/resume'),
+    ])
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body))).toEqual([
+      { title: 'Plan trip' },
+      { conversationId: 137, question: 'Plan trip' },
+      { conversationId: 137, toolCallId: 'call-form-137', answer: '杭州' },
+    ])
+    expect(ask.askStatus).toBe('submitted')
+    expect(store.messages.at(-1)).toMatchObject({ conversationId: 137, content: '已记录', status: 'completed' })
   })
   it('normalizes uppercase history roles so user messages stay on the right after refresh', async () => {
     appConfig.enableMock = false
@@ -221,11 +271,11 @@ describe('conversation store', () => {
     })
     appConfig.enableMock = true
   })
-  it('does not duplicate cumulative SSE content frames', async () => {
+  it('appends ordered message delta fragments verbatim', async () => {
     vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (): AsyncGenerator<StreamEvent> {
       yield { version: 1, type: 'message.delta', sequence: 0, payload: { content: '你好！很高兴为您服务😊' } }
-      yield { version: 1, type: 'message.delta', sequence: 1, payload: { content: '你好！很高兴为您服务😊\n\n我可以帮您查询天气信息，方便差旅出行安排。' } }
-      yield { version: 1, type: 'message.delta', sequence: 2, payload: { content: '我可以帮您查询天气信息，方便差旅出行安排。请问您想查询哪个城市、哪一天的天气呢？' } }
+      yield { version: 1, type: 'message.delta', sequence: 1, payload: { content: '\n\n我可以帮您查询天气信息，方便差旅出行安排。' } }
+      yield { version: 1, type: 'message.delta', sequence: 2, payload: { content: '请问您想查询哪个城市、哪一天的天气呢？' } }
       yield { version: 1, type: 'message.done', sequence: 3 }
     })
     const store = useConversationStore()
@@ -241,6 +291,18 @@ describe('conversation store', () => {
     const store = useConversationStore()
     await store.send('查询天气')
     expect(store.messages.at(-1)?.content).toBe('你好，正在为你查询。')
+  })
+  it('preserves repeated fragments inside streamed markdown tables', async () => {
+    const first = '| 项目 | 项目 |\n| --- | --- |\n| 申请单 |'
+    const second = ' 申请单 |'
+    vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (): AsyncGenerator<StreamEvent> {
+      yield { version: 1, type: 'message.delta', sequence: 0, payload: { content: first } }
+      yield { version: 1, type: 'message.delta', sequence: 1, payload: { content: second } }
+      yield { version: 1, type: 'done', sequence: 2 }
+    })
+    const store = useConversationStore()
+    await store.send('查询差旅申请')
+    expect(store.messages.at(-1)?.content).toBe(first + second)
   })
   it('clears workflow events on switching and creating conversations', async () => {
     const store = useConversationStore()

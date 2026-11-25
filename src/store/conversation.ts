@@ -51,22 +51,6 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  function mergeMessageDelta(current: string, incoming: string): string {
-    if (!incoming || incoming === current) return current
-    // Some stream producers send the full accumulated answer on every frame,
-    // while others send only the newly generated fragment.
-    if (!current) return incoming
-    if (incoming.startsWith(current)) return incoming
-    if (current.startsWith(incoming)) return current
-    if (current.includes(incoming)) return current
-
-    const maxOverlap = Math.min(current.length, incoming.length)
-    for (let overlap = maxOverlap; overlap >= 3; overlap -= 1) {
-      if (current.endsWith(incoming.slice(0, overlap))) return current + incoming.slice(overlap)
-    }
-    return current + incoming
-  }
-
   function appendIntentEvent(assistant: ConversationMessage, event: IntentEvent) {
     assistant.intentEvents ??= []
     const duplicate = assistant.intentEvents.some((item) => item.type === event.type && item.sequence === event.sequence)
@@ -209,7 +193,7 @@ export const useConversationStore = defineStore('conversation', () => {
         if (event.type === 'message.delta') {
           if (event.sequence <= (assistant.sequence ?? -1)) continue
           assistant.sequence = event.sequence
-          assistant.content = mergeMessageDelta(assistant.content, event.payload.content)
+          assistant.content += event.payload.content
         } else if (event.type === 'error') {
           assistant.status = 'failed'
           assistant.error = event.payload.message
@@ -236,7 +220,16 @@ export const useConversationStore = defineStore('conversation', () => {
     if (!content.trim() || busy.value) return
     sending.value = true
     try {
-      const conversationId = activeId.value
+      let conversationId = activeId.value
+      if (conversationId === null) {
+        // /chat/chat may replace an unknown ID, and ask frames need not include the real ID.
+        // Create the conversation first so chat, interrupt and resume share its persisted ID.
+        const conversation = await conversationApi.create(content.trim().slice(0, 24))
+        conversationId = conversation.id
+        if (!Number.isSafeInteger(conversationId) || conversationId <= 0) throw new Error('创建会话未返回有效会话号，请重新发送')
+        activeId.value = conversationId
+        conversations.value.unshift(conversation)
+      }
       const userMessage = await conversationApi.sendMessage(conversationId, content.trim())
       messages.value.push(userMessage)
       const assistant = reactive<ConversationMessage>({ id: Date.now() + 1, conversationId: conversationId ?? 0, role: 'assistant', content: '', status: 'streaming', sequence: -1 })

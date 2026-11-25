@@ -59,11 +59,10 @@ a, button, input, textarea { touch-action: manipulation; }
 .data-section-heading h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0; color: var(--text); font-size: 14px; font-weight: 500; }
 .data-section-heading h2 > span { color: #8993a3; font-size: 11px; font-weight: 400; }
 .admin-load-error { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; min-height: 180px; padding: 24px; color: var(--text-muted); font-size: 13px; }
-.markdown-body.markstream-vue { --ms-text-body: 13px; --ms-leading-body: 1.7; --ms-text-h1: 20px; --ms-text-h2: 18px; --ms-text-h3: 15px; --ms-text-h4: 13px; --ms-text-h5: 13px; --ms-text-h6: 13px; font-size: 13px; }
 .markdown-body { color: #364155; line-height: 1.75; overflow-wrap: anywhere; font-size: 13px; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3 { color: var(--text); line-height: 1.5; margin: 1.25em 0 .65em; font-weight: 600; }
 .markdown-body h1 { font-size: 20px; }.markdown-body h2 { font-size: 18px; }.markdown-body h3 { font-size: 15px; }
-.markdown-body .node-slot:first-of-type .node-content > :first-child { margin-top: 0; }.markdown-body .node-slot:last-of-type .node-content > :last-child { margin-bottom: 0; }
+.markdown-body .x-md-core > :first-child { margin-top: 0; }.markdown-body .x-md-core > :last-child { margin-bottom: 0; }
 .markdown-body p { margin: .65em 0; }
 .markdown-body ul, .markdown-body ol { padding-left: 1.5rem; }
 .markdown-body li { margin: .35em 0; }

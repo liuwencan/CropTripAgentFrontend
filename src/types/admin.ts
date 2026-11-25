@@ -89,6 +89,7 @@ export interface AgentTraceSpan {
   modelName?: string | null
   toolName?: string | null
   toolCallId?: string | null
+  toolInput?: unknown
   inputMessageCount?: number | null
   inputChars?: number | null
   outputChars?: number | null

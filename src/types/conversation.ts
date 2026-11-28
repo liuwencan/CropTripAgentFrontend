@@ -103,6 +103,7 @@ export interface ConversationMessage extends Message {
   askToolCallId?: string
   askStatus?: 'pending' | 'submitted'
   bookingResults?: BookingResult[]
+  planHtml?: PlanHtmlPayload
   recommendedQuestions?: string[]
 }
 
@@ -122,6 +123,12 @@ export interface BookingResult {
   currency?: string
   payUrl?: string
   statusLabel?: string
+}
+
+export interface PlanHtmlPayload {
+  type: 'plan_html'
+  html: string
+  title: string
 }
 
 export type IntentEvent =
@@ -212,4 +219,5 @@ export type StreamEvent =
   | { version: number; type: 'error'; sequence: number; messageId?: number; payload: { message: string } }
   | { version: number; type: 'done'; sequence: number; messageId?: number; payload?: ConversationCompletePayload }
   | { version: number; type: 'booking_result'; sequence: number; messageId?: number; payload: BookingResult }
+  | { version: number; type: 'plan_html'; sequence: number; messageId?: number; payload: PlanHtmlPayload }
   | { version: number; type: 'recommend_questions'; sequence: number; messageId?: number; payload: RecommendedQuestionsPayload }

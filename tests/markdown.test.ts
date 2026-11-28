@@ -25,6 +25,18 @@ describe('MarkdownContent', () => {
     expect(wrapper.find('h2').text()).toBe('完整内容')
   })
 
+  it('renders plan HTML after the markdown stream without an inner scrollbar', () => {
+    const html = '<!doctype html><html><head><style>body{color:red}</style></head><body><h1>上海行程</h1></body></html>'
+    const wrapper = mount(MarkdownContent, { props: { source: '已为你整理行程。', planHtml: { type: 'plan_html', html, title: '上海出差方案' } } })
+    const iframe = wrapper.get('.markdown-plan-html')
+    expect(wrapper.find('.x-md-renderer').exists()).toBe(true)
+    expect(iframe.attributes('srcdoc')).toBe(html)
+    expect(iframe.attributes('sandbox')).toBe('allow-same-origin')
+    expect(iframe.attributes('scrolling')).toBe('no')
+    expect(wrapper.find('.plan-html-frame').exists()).toBe(false)
+    expect(wrapper.findAll('.x-md-renderer, .markdown-plan-html').map((node) => node.element.tagName)).toEqual(['DIV', 'IFRAME'])
+  })
+
   it('preserves all digits in long table values while streamed content updates', async () => {
     const completeMarkdown = [
       '已查询到差旅申请单，共 2 条：',

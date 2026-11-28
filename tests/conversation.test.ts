@@ -43,6 +43,52 @@ describe('conversation store', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/agent/conversations'))).toBe(false)
     appConfig.enableMock = true
   })
+  it('merges a persisted PLAN_RESULT into the preceding assistant history message', async () => {
+    appConfig.enableMock = false
+    const html = '<!doctype html><html><body><h1>上海出差方案</h1></body></html>'
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: [
+        { id: 1, conversationId: 12, role: 'ASSISTANT', content: '已为你整理行程。', status: 'completed' },
+        { id: 2, conversationId: 12, role: 'PLAN_RESULT', content: JSON.stringify({ type: 'plan_html', html, title: '上海出差方案' }) },
+      ],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const messages = await conversationApi.messages(12)
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      role: 'assistant',
+      content: '已为你整理行程。',
+      planHtml: { type: 'plan_html', html, title: '上海出差方案' },
+    })
+    expect(fetchMock.mock.calls[0][0]).toContain('/agent/conversations/12/messages')
+    appConfig.enableMock = true
+  })
+  it('merges PLAN_RESULT when the history API returns newest messages first', async () => {
+    appConfig.enableMock = false
+    const html = '<!doctype html><html><body><h1>杭州到广州行程方案</h1></body></html>'
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: [
+        { id: 868, conversationId: 335, role: 'PLAN_RESULT', content: JSON.stringify({ type: 'plan_html', html, title: '杭州 → 广州 差旅行程方案' }), createTime: '2026-11-28T02:00:44.945215' },
+        { id: 867, conversationId: 335, role: 'ASSISTANT', content: '已完成行程规划，详细的内容如下。', createTime: '2026-11-28T02:00:44.937262' },
+      ],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const messages = await conversationApi.messages(335)
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      id: 867,
+      role: 'assistant',
+      content: '已完成行程规划，详细的内容如下。',
+      planHtml: { type: 'plan_html', html, title: '杭州 → 广州 差旅行程方案' },
+    })
+    appConfig.enableMock = true
+  })
   it('keeps chat and resume SSE requests alive for two hours', async () => {
     appConfig.enableMock = false
     const timeoutSpy = vi.spyOn(window, 'setTimeout')
@@ -434,5 +480,17 @@ describe('conversation store', () => {
     expect(store.messages.at(-1)?.bookingResults).toHaveLength(1)
     expect(store.messages.at(-1)?.bookingResults?.[0]).toMatchObject({ orderId: 'A123', payUrl: 'https://pay.example/order/A123' })
     expect(store.messages.at(-1)?.content).toBe('')
+  })
+  it('attaches a plan_html event to the assistant message', async () => {
+    const html = '<html><body><h1>行程方案</h1></body></html>'
+    vi.spyOn(conversationApi, 'stream').mockImplementation(async function* (): AsyncGenerator<StreamEvent> {
+      yield { version: 1, type: 'plan_html', sequence: 0, payload: { type: 'plan_html', html, title: '上海出差方案' } }
+      yield { version: 1, type: 'done', sequence: 1 }
+    })
+    const store = useConversationStore()
+
+    await store.send('规划上海出差')
+
+    expect(store.messages.at(-1)?.planHtml).toEqual({ type: 'plan_html', html, title: '上海出差方案' })
   })
 })

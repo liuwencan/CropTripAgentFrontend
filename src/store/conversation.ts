@@ -185,6 +185,10 @@ export const useConversationStore = defineStore('conversation', () => {
           if (!alreadyAdded) assistant.bookingResults.push(event.payload)
           continue
         }
+        if (event.type === 'plan_html') {
+          assistant.planHtml = event.payload
+          continue
+        }
         if (event.type === 'recommend_questions') {
           assistant.recommendedQuestions = event.payload.questions
           continue

@@ -97,6 +97,25 @@ describe('parseSseEvent', () => {
     })
   })
 
+  it('parses the named plan_html event and applies the default title', () => {
+    const html = '<!doctype html><html><head><style>body{color:red}</style></head><body><h1>行程</h1></body></html>'
+    expect(parseSseEvent(`event: plan_html\ndata: ${JSON.stringify({ type: 'plan_html', html })}`, 6)).toEqual({
+      version: 1,
+      type: 'plan_html',
+      sequence: 6,
+      payload: { type: 'plan_html', html, title: '差旅行程方案' },
+    })
+  })
+
+  it('parses a plan_html event wrapped by an eventType envelope', () => {
+    const html = '<main><h1>行程</h1></main>'
+    expect(parseSseEvent(`data: ${JSON.stringify({ eventType: 'plan_html', payload: { html, sequence: 12 } })}`, 2)).toMatchObject({
+      type: 'plan_html',
+      sequence: 12,
+      payload: { html, title: '差旅行程方案' },
+    })
+  })
+
   const progress = {
     eventId: 'event-1', eventType: 'tool_result', agentId: 'agent-1', agentName: '主智能体',
     tooldesc: '获取用户信息', timestamp: 1793505600123, toolCallId: 'call-1', toolName: 'get_userinfo',

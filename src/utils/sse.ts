@@ -1,4 +1,4 @@
-import type { AgentPlan, AskUserPrompt, BookingResult, IntentProgressPayload, RecommendedQuestionsPayload, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
+import type { AgentPlan, AskUserPrompt, BookingResult, IntentProgressPayload, PlanHtmlPayload, RecommendedQuestionsPayload, StreamEvent, ThinkingEventPayload, ToolResultEventPayload, ToolStartEventPayload, ToolSuccessEventPayload } from '@/types/conversation'
 
 function extractDelta(value: unknown): string | undefined {
   if (typeof value === 'string') return value
@@ -68,6 +68,17 @@ export function parseSseEvent(raw: string, fallbackSequence = 0): StreamEvent | 
   try {
     const bookingPayload = parseObject(payload.payload) ?? parseObject(payload.data) ?? payload
     const recommendationPayload = parseObject(payload.payload) ?? parseObject(payload.data) ?? payload
+    const planHtmlPayload = parseObject(payload.payload) ?? parseObject(payload.data) ?? payload
+    if (eventName?.toLowerCase() === 'plan_html' || String(payload.eventType ?? '').toLowerCase() === 'plan_html' || payload.type === 'plan_html' || planHtmlPayload.type === 'plan_html') {
+      if (typeof planHtmlPayload.html !== 'string' || !planHtmlPayload.html.trim()) return null
+      const planHtml: PlanHtmlPayload = {
+        type: 'plan_html',
+        html: planHtmlPayload.html,
+        title: typeof planHtmlPayload.title === 'string' && planHtmlPayload.title.trim() ? planHtmlPayload.title.trim() : '差旅行程方案',
+      }
+      const eventSequence = typeof payload.sequence === 'number' ? payload.sequence : typeof planHtmlPayload.sequence === 'number' ? planHtmlPayload.sequence : fallbackSequence
+      return { version: 1, type: 'plan_html', sequence: eventSequence, payload: planHtml }
+    }
     if (eventName?.toLowerCase() === 'recommend_questions' || String(payload.eventType ?? '').toLowerCase() === 'recommend_questions' || payload.type === 'recommend_questions' || recommendationPayload.format === 'recommend_questions.v1') {
       const questionValues = recommendationPayload.question ?? recommendationPayload.questions
       const questions = (Array.isArray(questionValues) ? questionValues : typeof questionValues === 'string' ? [questionValues] : [])

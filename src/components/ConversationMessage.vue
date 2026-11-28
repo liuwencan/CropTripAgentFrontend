@@ -47,7 +47,7 @@ async function copy() {
         <AgentProgressTimeline :tools="message.toolCalls" :status="message.status" />
       </div>
       <AgentPlanList v-if="!isUser && message.plans?.length" :plans="message.plans" />
-      <div class="message-bubble"><MarkdownContent v-if="!isUser && message.content" :source="message.content" :is-streaming="message.status === 'streaming'" /><p v-else-if="isUser">{{ message.content }}</p><p v-else-if="message.status === 'streaming' && !message.intentEvents?.length && !message.toolCalls?.length && !message.agentOutputs?.length && !message.plans?.length" class="stream-placeholder">正在整理你的需求…</p></div>
+      <div class="message-bubble"><MarkdownContent v-if="!isUser && (message.content || message.planHtml)" :source="message.content" :plan-html="message.planHtml" :is-streaming="message.status === 'streaming'" /><p v-else-if="isUser">{{ message.content }}</p><p v-else-if="message.status === 'streaming' && !message.planHtml && !message.intentEvents?.length && !message.toolCalls?.length && !message.agentOutputs?.length && !message.plans?.length" class="stream-placeholder">正在整理你的需求…</p></div>
       <AskUserPrompt v-if="!isUser && message.ask" :prompt="message.ask" :submitted="message.askStatus === 'submitted'" @submit="(value, display) => emit('askSubmit', message, value, display)" />
       <div v-if="!isUser && message.bookingResults?.length" class="booking-results" aria-label="预订结果">
         <article v-for="(booking, index) in message.bookingResults" :key="booking.orderId || booking.payUrl || `${booking.title}-${index}`" class="booking-card">

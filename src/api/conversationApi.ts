@@ -3,7 +3,7 @@ import { buildUrl, getAuthorizationHeader, request, requestData } from './http'
 import { getRequestBase } from '@/utils/requestRouting'
 import { readSseStream } from '@/utils/sse'
 import { createIdempotencyKey } from '@/utils/id'
-import type { AskUserPrompt, Conversation, ConversationMessage, StreamEvent } from '@/types/conversation'
+import type { AskUserPrompt, Conversation, ConversationMessage, PlanHtmlPayload, StreamEvent } from '@/types/conversation'
 import type { PageResponse } from '@/types/api'
 
 import { mockConversation, mockStream } from '@/mocks/fixtures'
@@ -14,10 +14,14 @@ const mockConversations: Conversation[] = [{ ...mockConversation, messageCount: 
 const mockMessages = new Map<number, ConversationMessage[]>()
 let mockConversationId = mockConversation.id
 
-function normalizeMessageRole(message: ConversationMessage): ConversationMessage {
+function getMessageRole(message: ConversationMessage): string {
   const raw = message as ConversationMessage & Record<string, unknown>
   const roleValue = raw.role ?? raw.senderRole ?? raw.messageRole ?? raw.senderType ?? raw.messageType
-  const role = typeof roleValue === 'string' ? roleValue.toLowerCase() : ''
+  return typeof roleValue === 'string' ? roleValue.trim().toLowerCase() : ''
+}
+
+function normalizeMessageRole(message: ConversationMessage): ConversationMessage {
+  const role = getMessageRole(message)
   if (['user', 'human', 'customer', 'employee'].includes(role)) return { ...message, role: 'user' }
   if (['assistant', 'ai', 'agent', 'bot'].includes(role)) return { ...message, role: 'assistant' }
   if (role === 'tool') return normalizeToolMessage(message)
@@ -30,10 +34,51 @@ function parseObject(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'string') return undefined
   try {
     const parsed = JSON.parse(value) as unknown
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+    // Some history adapters serialize the message content twice.
+    return typeof parsed === 'string' ? parseObject(parsed) : undefined
   } catch {
     return undefined
   }
+}
+
+function parsePlanHtml(value: unknown): PlanHtmlPayload | undefined {
+  const data = parseObject(value)
+  if (data?.type !== 'plan_html' || typeof data.html !== 'string' || !data.html.trim()) return undefined
+  return {
+    type: 'plan_html',
+    html: data.html,
+    title: typeof data.title === 'string' && data.title.trim() ? data.title.trim() : '差旅行程方案',
+  }
+}
+
+function orderHistoryMessages(messages: ConversationMessage[]): ConversationMessage[] {
+  return messages
+    .map((message, index) => ({ message, index, time: Date.parse(message.createTime ?? '') }))
+    .sort((left, right) => {
+      if (Number.isFinite(left.time) && Number.isFinite(right.time) && left.time !== right.time) return left.time - right.time
+      if (left.message.id !== right.message.id) return left.message.id - right.message.id
+      return left.index - right.index
+    })
+    .map(({ message }) => message)
+}
+
+function normalizeHistoryMessages(messages: ConversationMessage[]): ConversationMessage[] {
+  const normalized: ConversationMessage[] = []
+  orderHistoryMessages(messages).forEach((message) => {
+    if (getMessageRole(message) === 'plan_result') {
+      const previousMessage = normalized.at(-1)
+      if (previousMessage?.role === 'assistant') {
+        const planHtml = parsePlanHtml(message.content)
+        if (planHtml) {
+          previousMessage.planHtml = planHtml
+          return
+        }
+      }
+    }
+    normalized.push(normalizeMessageRole(message))
+  })
+  return normalized
 }
 
 function isAskPrompt(value: unknown): value is AskUserPrompt {
@@ -75,9 +120,9 @@ export const conversationApi = {
     return requestData<Conversation>('/agent/conversations', { method: 'POST', body: JSON.stringify({ title }) })
   },
   async messages(conversationId: number): Promise<ConversationMessage[]> {
-    if (appConfig.enableMock) return (mockMessages.get(conversationId) || []).map((message) => normalizeMessageRole({ ...message }))
+    if (appConfig.enableMock) return normalizeHistoryMessages((mockMessages.get(conversationId) || []).map((message) => ({ ...message })))
     const page = await request<PageResponse<ConversationMessage>>(`/agent/conversations/${conversationId}/messages?pageNo=1&pageSize=100`)
-    return page.data.map(normalizeMessageRole)
+    return normalizeHistoryMessages(page.data)
   },
   async interrupt(conversationId: number): Promise<void> {
     if (appConfig.enableMock) return
